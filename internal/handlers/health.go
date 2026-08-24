@@ -8,23 +8,32 @@ import (
 	"time"
 )
 
-//TODO: сделать общую структуру для ответа, поменять сериализацию JSON
+type HealthResponse struct {
+	Status         string `json:"status"`
+	Error          string `json:"error,omitempty"`
+	LastCollection string `json:"last_collection,omitempty"`
+}
 
 func (h *Handler) HealthHandler(rw http.ResponseWriter, r *http.Request) {
+	log.Println("[INFO] получен запрос по адресу /health")
+
+	rw.Header().Set("Content-Type", "application/json")
+
 	lastSuccess, lastError := h.system.GetHealth()
 
 	if lastSuccess.IsZero() {
 		log.Print("[ERROR] при запросе по /health ещё нет успешных чтений метрик")
 		rw.WriteHeader(http.StatusServiceUnavailable)
 
-		resp := struct {
-			Status string `json:"status"`
-			Error  string `json:"error"`
-		}{Status: "unhealthy",
-			Error: "еще нет успешных чтений метрик"}
+		response := HealthResponse{
+			Status: "unhealthy",
+			Error:  "ещё нет успешных чтений метрик",
+		}
 
-		respJSON, _ := json.Marshal(resp)
-		rw.Write(respJSON)
+		err := json.NewEncoder(rw).Encode(response)
+		if err != nil {
+			log.Printf("[ERROR] не удалось записать ответ в JSON: %v", err)
+		}
 
 		return
 	}
@@ -33,14 +42,15 @@ func (h *Handler) HealthHandler(rw http.ResponseWriter, r *http.Request) {
 		log.Printf("[ERROR] ошибка при чтении метрик: %v", lastError)
 		rw.WriteHeader(http.StatusServiceUnavailable)
 
-		resp := struct {
-			Status string `json:"status"`
-			Error  string `json:"error"`
-		}{Status: "unhealthy",
-			Error: fmt.Sprintf("ошибка при чтении метрик: %v", lastError)}
+		response := HealthResponse{
+			Status: "unhealthy",
+			Error:  fmt.Sprintf("ошибка при чтении метрик: %v", lastError),
+		}
 
-		respJSON, _ := json.Marshal(resp)
-		rw.Write(respJSON)
+		err := json.NewEncoder(rw).Encode(response)
+		if err != nil {
+			log.Printf("[ERROR] не удалось записать ответ в JSON: %v", err)
+		}
 		return
 	}
 
@@ -48,23 +58,25 @@ func (h *Handler) HealthHandler(rw http.ResponseWriter, r *http.Request) {
 		log.Print("[ERROR] последнее обновление данных случилось дольше 10 секунд назад")
 		rw.WriteHeader(http.StatusServiceUnavailable)
 
-		resp := struct {
-			Status string `json:"status"`
-			Error  string `json:"error"`
-		}{Status: "unhealthy",
-			Error: "последнее обновление данных случилось дольше 10 секунд назад"}
+		response := HealthResponse{
+			Status: "unhealthy",
+			Error:  "последнее обновление данных случилось дольше 10 секунд назад",
+		}
 
-		respJSON, _ := json.Marshal(resp)
-		rw.Write(respJSON)
+		err := json.NewEncoder(rw).Encode(response)
+		if err != nil {
+			log.Printf("[ERROR] не удалось записать ответ в JSON: %v", err)
+		}
 
 		return
 	}
 
-	resp := struct {
-		Status         string `json:"status"`
-		LastCollection string `json:"last_collection"`
-	}{Status: "ok",
-		LastCollection: lastSuccess.Format("2006-01-02T15:04:05Z")}
-	respJSON, _ := json.Marshal(resp)
-	rw.Write(respJSON)
+	response := HealthResponse{
+		Status:         "ok",
+		LastCollection: lastSuccess.UTC().Format(time.RFC3339),
+	}
+	err := json.NewEncoder(rw).Encode(response)
+	if err != nil {
+		log.Printf("[ERROR] не удалось записать ответ в JSON: %v", err)
+	}
 }

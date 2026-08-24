@@ -2,6 +2,7 @@ package system
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"time"
 )
@@ -82,6 +83,8 @@ func (s *System) CollectMetrics() error {
 	s.lastError = nil
 	s.lastSuccess = time.Now()
 	s.mu.Unlock()
+
+	log.Println("[INFO] метрики успешно обновлены")
 
 	return nil
 }
