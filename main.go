@@ -24,7 +24,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("не удалось получить данные о памяти: %v", err)
 	}
-	fmt.Printf("| %-20s | %-20s |\n", "Memory Usage", fmt.Sprintf("%.2f%%", memUsage))
+	fmt.Printf("| %-20s | %-20s ср|\n", "Memory Usage", fmt.Sprintf("%.2f%%", memUsage))
 	fmt.Printf("| %-20s | %-20s |\n", "Memory", fmt.Sprintf("%.1f / %.1f MB", usedMem, totalMem))
 
 	totalDisk, usedDisk, diskUsage, err := getDiskStats()
