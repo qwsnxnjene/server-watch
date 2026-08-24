@@ -1,5 +1,5 @@
 run:
-	go run main.go
+	go run ./cmd/server-watch/main.go
 
 vet:
 	go vet ./...
