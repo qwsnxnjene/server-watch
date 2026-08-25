@@ -57,16 +57,7 @@ func main() {
 		}
 	}(ctx)
 
-	handler := handlers.NewHandler(sys)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/metrics", handler.MetricsHandler)
-	mux.HandleFunc("/health", handler.HealthHandler)
-
-	server := http.Server{
-		Addr:    "localhost:8080",
-		Handler: mux,
-	}
+	server := newHTTPServer(sys)
 
 	go func() {
 		log.Printf("[INFO] сервер запущен на localhost:8080")
@@ -90,4 +81,17 @@ func main() {
 	}
 	log.Println("[INFO] выполнение программы остановлено")
 	wg.Wait()
+}
+
+func newHTTPServer(sys *system.System) *http.Server {
+	handler := handlers.NewHandler(sys)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/metrics", handler.MetricsHandler)
+	mux.HandleFunc("/health", handler.HealthHandler)
+
+	return &http.Server{
+		Addr:    "localhost:8080",
+		Handler: mux,
+	}
 }
