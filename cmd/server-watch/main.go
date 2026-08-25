@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"server-watch/internal/handlers"
+	"server-watch/internal/storage"
 	"server-watch/internal/system"
 	"sync"
 	"syscall"
@@ -20,8 +21,18 @@ func main() {
 
 	wg := sync.WaitGroup{}
 
+	db, err := storage.NewSQLite("server-watch.db")
+	if err != nil {
+		log.Fatalf("[ERROR] %v", err)
+	}
+	defer db.Close()
+
+	if err := storage.Migrate(db); err != nil {
+		log.Fatalf("[ERROR] %v", err)
+	}
+
 	sys := system.NewSystem()
-	err := sys.CollectMetrics()
+	err = sys.CollectMetrics()
 	if err != nil {
 		log.Fatalf("[ERROR] не удалось прочитать метрики при запуске: %v", err)
 	}

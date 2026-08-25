@@ -6,18 +6,36 @@ import (
 	"net/http"
 )
 
-func (h *Handler) MetricsHandler(w http.ResponseWriter, r *http.Request) {
+type MetricsResponse struct {
+	CPUPercent  float64 `json:"cpu_percent"`
+	MemPercent  float64 `json:"mem_percent"`
+	MemUsedMB   float64 `json:"mem_used_mb"`
+	MemTotalMB  float64 `json:"mem_total_mb"`
+	DiskPercent float64 `json:"disk_percent"`
+	DiskUsedGB  float64 `json:"disk_used_gb"`
+	DiskTotalGB float64 `json:"disk_total_gb"`
+}
+
+func (h *Handler) MetricsHandler(rw http.ResponseWriter, r *http.Request) {
 	log.Println("[INFO] получен запрос по адресу /metrics")
-	w.Header().Set("Content-Type", "application/json")
+	rw.Header().Set("Content-Type", "application/json")
 
 	metrics := h.system.GetMetrics()
 
-	resp, err := json.Marshal(metrics)
-	if err != nil {
-		log.Printf("[ERROR] не удалось сериализовать метрики: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+	response := MetricsResponse{
+		CPUPercent:  metrics.CPUUsage,
+		MemPercent:  metrics.MemUsage,
+		MemUsedMB:   metrics.MemUsedMB,
+		MemTotalMB:  metrics.MemTotalMB,
+		DiskPercent: metrics.DiskUsage,
+		DiskUsedGB:  metrics.DiskUsed,
+		DiskTotalGB: metrics.DiskTotal,
 	}
 
-	w.Write(resp)
+	err := json.NewEncoder(rw).Encode(response)
+	if err != nil {
+		log.Printf("[ERROR] не удалось сериализовать метрики: %v", err)
+		rw.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 }
