@@ -31,7 +31,9 @@ func main() {
 		log.Fatalf("[ERROR] %v", err)
 	}
 
-	sys := system.NewSystem()
+	repo := storage.NewSQLiteRepository(db)
+
+	sys := system.NewSystem(repo)
 	err = sys.CollectMetrics()
 	if err != nil {
 		log.Fatalf("[ERROR] не удалось прочитать метрики при запуске: %v", err)

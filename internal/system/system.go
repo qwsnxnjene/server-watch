@@ -12,10 +12,11 @@ type System struct {
 	metrics     Metrics
 	lastSuccess time.Time
 	lastError   error
+	repository  Repository
 }
 
-func NewSystem() *System {
-	return &System{}
+func NewSystem(repository Repository) *System {
+	return &System{repository: repository}
 }
 
 // GetMetrics возвращает копию метрик
@@ -71,10 +72,18 @@ func (s *System) CollectMetrics() error {
 		Timestamp:  now,
 	}
 
+	if err := s.repository.SaveMetrics(metrics); err != nil {
+		errToReturn := fmt.Errorf("не удалось сохранить метрики в БД: %w", err)
+		s.mu.Lock()
+		s.lastError = errToReturn
+		s.mu.Unlock()
+		return errToReturn
+	}
+
 	s.mu.Lock()
 	s.metrics = metrics
 	s.lastError = nil
-	s.lastSuccess = now
+	s.lastSuccess = metrics.Timestamp
 	s.mu.Unlock()
 
 	log.Println("[INFO] метрики успешно обновлены")

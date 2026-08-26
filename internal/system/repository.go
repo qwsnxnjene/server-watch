@@ -10,5 +10,5 @@ type Repository interface {
 	GetMetrics(from time.Time, to time.Time) ([]Metrics, error)
 	GetAlerts(activeOnly bool) ([]Alert, error)
 	ResolveAlert(id int64, resolvedAt time.Time) error
-	GetActiveAlert(alertType string) (*Alert, error)
+	GetActiveAlert(alertType AlertType) (*Alert, error)
 }
