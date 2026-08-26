@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"server-watch/internal/system"
 	"time"
@@ -33,7 +34,7 @@ func (s *SQLiteRepository) SaveMetrics(metrics system.Metrics) error {
         :mem_total_mb,
         :disk_used_gb,
         :disk_total_gb
-    );
+    )
 	`,
 		sql.Named("ts", metrics.Timestamp.UTC()),
 		sql.Named("cpu", metrics.CPUUsage),
@@ -66,7 +67,7 @@ func (s *SQLiteRepository) SaveAlert(alert system.Alert) (int64, error) {
 	    :value,
 	    :resolved,
 	    :resolved_ts
-	);
+	)
 	`,
 		sql.Named("ts", alert.Timestamp),
 		sql.Named("type", alert.Type),
@@ -90,18 +91,20 @@ func (s *SQLiteRepository) SaveAlert(alert system.Alert) (int64, error) {
 
 func (s *SQLiteRepository) GetMetrics(from time.Time, to time.Time) ([]system.Metrics, error) {
 	rows, err := s.db.Query(`
-	SELECT (ts, cpu, mem_used_mb, mem_total_mb, disk_used_gb, disk_total_gb)
+	SELECT ts, cpu, mem_used_mb, mem_total_mb, disk_used_gb, disk_total_gb
 	FROM metrics
-	WHERE ts BETWEEN :from AND :to;
+	WHERE ts BETWEEN :from AND :to
 	`,
 		sql.Named("from", from),
 		sql.Named("to", to),
 	)
-	defer rows.Close()
-
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("не удалось получить список метрик из базы данных SQLite: %w", err)
 	}
+	defer rows.Close()
 
 	var metrics []system.Metrics
 
@@ -137,38 +140,52 @@ func (s *SQLiteRepository) GetMetrics(from time.Time, to time.Time) ([]system.Me
 }
 
 func (s *SQLiteRepository) GetAlerts(activeOnly bool) ([]system.Alert, error) {
-	rows, err := s.db.Query(`
-	SELECT (id, ts, type, threshold, value, resolved, resolved_ts)
+	query := `
+	SELECT id, ts, type, threshold, value, resolved, resolved_ts
 	FROM alerts
-	WHERE resolved = :activeOnly;
-`,
-		sql.Named("activeOnly", !activeOnly))
+`
+
+	if activeOnly {
+		query += ` WHERE resolved = FALSE`
+	}
+
+	rows, err := s.db.Query(query)
 
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("не удалось получить список алертов из базы данных SQLite: %w", err)
 	}
+	defer rows.Close()
 
 	var alerts []system.Alert
 
 	for rows.Next() {
 		var id int64
-		var ts, resolvedTs time.Time
+		var ts time.Time
 		var alertType string
 		var resolved bool
 		var threshold, value float64
+		var resolvedTs sql.NullTime
 
 		err := rows.Scan(&id, &ts, &alertType, &threshold, &value, &resolved, &resolvedTs)
 		if err != nil {
 			return nil, fmt.Errorf("не удалось прочитать алерт из базы данных SQLite: %w", err)
 		}
 
+		var resolvedAt *time.Time
+		if resolvedTs.Valid {
+			resolvedAt = &resolvedTs.Time
+		}
+
 		currAlert := system.Alert{
 			ID:         id,
-			Type:       alertType,
+			Type:       system.AlertType(alertType),
 			Timestamp:  ts,
 			Threshold:  threshold,
 			Resolved:   resolved,
-			ResolvedAt: &resolvedTs,
+			ResolvedAt: resolvedAt,
 			Value:      value,
 		}
 
@@ -187,7 +204,7 @@ func (s *SQLiteRepository) ResolveAlert(id int64, resolvedAt time.Time) error {
 	_, err := s.db.Exec(`
 	UPDATE alerts
 	SET resolved = TRUE, resolved_ts = :resolvedTs
-	WHERE id = :id;
+	WHERE id = :id
 `,
 		sql.Named("resolvedTs", resolvedAt),
 		sql.Named("id", id))
@@ -199,31 +216,41 @@ func (s *SQLiteRepository) ResolveAlert(id int64, resolvedAt time.Time) error {
 	return nil
 }
 
-func (s *SQLiteRepository) GetActiveAlert(alertType string) (*system.Alert, error) {
+func (s *SQLiteRepository) GetActiveAlert(alertType system.AlertType) (*system.Alert, error) {
 	row := s.db.QueryRow(`
-	SELECT (id, ts, type, threshold, value, resolved, resolved_ts)
+	SELECT id, ts, type, threshold, value, resolved, resolved_ts
 	FROM alerts
-	WHERE type = :type AND resolved = FALSE;
+	WHERE type = :type AND resolved = FALSE
 `,
 		sql.Named("type", alertType))
 
 	var id int64
-	var ts, resolvedTs time.Time
+	var ts time.Time
 	var typeAlert string
 	var resolved bool
 	var threshold, value float64
+	var resolvedTs sql.NullTime
 
 	if err := row.Scan(&id, &ts, &typeAlert, &threshold, &value, &resolved, &resolvedTs); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+
 		return nil, fmt.Errorf("не удалось получить действующий алерт из базы данных SQLite: %w", err)
+	}
+
+	var resolvedAt *time.Time
+	if resolvedTs.Valid {
+		resolvedAt = &resolvedTs.Time
 	}
 
 	alert := system.Alert{
 		ID:         id,
-		Type:       typeAlert,
+		Type:       system.AlertType(typeAlert),
 		Timestamp:  ts,
 		Threshold:  threshold,
 		Resolved:   resolved,
-		ResolvedAt: &resolvedTs,
+		ResolvedAt: resolvedAt,
 		Value:      value,
 	}
 

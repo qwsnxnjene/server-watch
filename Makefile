@@ -10,3 +10,6 @@ lint:
 check:
 	go vet ./...
 	golangci-lint run
+
+test:
+	go test ./... -v
