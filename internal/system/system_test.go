@@ -16,6 +16,7 @@ type FakeRepository struct {
 	getActiveAlertErr error
 	resolveAlertErr   error
 	getMetricsErr     error
+	getAlertsErr      error
 
 	nextAlertID int64
 }
@@ -56,7 +57,22 @@ func (f *FakeRepository) GetMetrics(from time.Time, to time.Time) ([]Metrics, er
 }
 
 func (f *FakeRepository) GetAlerts(activeOnly bool) ([]Alert, error) {
-	return nil, nil
+	if f.getAlertsErr != nil {
+		return nil, f.getAlertsErr
+	}
+
+	if !activeOnly {
+		return f.alerts, nil
+	}
+
+	var alerts []Alert
+	for _, alert := range f.alerts {
+		if !alert.Resolved {
+			alerts = append(alerts, alert)
+		}
+	}
+
+	return alerts, nil
 }
 
 func (f *FakeRepository) ResolveAlert(id int64, resolvedAt time.Time) error {
@@ -490,5 +506,75 @@ func TestSystem_GetHistory_IncludeBoundaries(t *testing.T) {
 
 	if len(metrics) != 2 {
 		t.Fatalf("ожидалось 2 метрики, получили %v", len(metrics))
+	}
+}
+
+func TestSystem_GetAlerts(t *testing.T) {
+	tests := []struct {
+		name        string
+		alertsToAdd []Alert
+		wantAlerts  int
+		activeOnly  bool
+	}{
+		{
+			name: "все алерты",
+			alertsToAdd: []Alert{
+				{Type: AlertTypeHighCPU},
+				{Type: AlertTypeHighMem},
+				{Type: AlertTypeHighCPU, Threshold: HighCPUThreshold, Resolved: true},
+			},
+			wantAlerts: 3,
+			activeOnly: false,
+		},
+		{
+			name: "только активные алерты",
+			alertsToAdd: []Alert{
+				{Type: AlertTypeHighCPU},
+				{Type: AlertTypeHighMem},
+				{Type: AlertTypeHighCPU, Threshold: HighCPUThreshold, Resolved: true},
+			},
+			wantAlerts: 2,
+			activeOnly: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeRepo := FakeRepository{alerts: make([]Alert, 0)}
+
+			for i := range tt.alertsToAdd {
+				_, err := fakeRepo.SaveAlert(tt.alertsToAdd[i])
+				if err != nil {
+					t.Fatalf("не удалось добавить алерт: %v", err)
+				}
+			}
+
+			system := newTestSystem(&fakeRepo)
+
+			alerts, err := system.GetAlerts(tt.activeOnly)
+			if err != nil {
+				t.Fatalf("не удалось получить список алертов: %v", err)
+			}
+
+			if len(alerts) != tt.wantAlerts {
+				t.Fatalf("ожидали %v алертов, получили %v", tt.wantAlerts, len(alerts))
+			}
+		})
+	}
+}
+
+func TestSystem_GetAlerts_Error(t *testing.T) {
+	fakeErr := errors.New("не удалось получить список алертов")
+
+	fakeRepo := FakeRepository{
+		alerts:       make([]Alert, 0),
+		getAlertsErr: fakeErr,
+	}
+
+	system := newTestSystem(&fakeRepo)
+
+	_, err := system.GetAlerts(true)
+	if !errors.Is(err, fakeErr) {
+		t.Fatalf("ожидали ошибку %v, получили %v", fakeErr, err)
 	}
 }

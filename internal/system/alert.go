@@ -1,6 +1,9 @@
 package system
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type AlertType string
 
@@ -8,8 +11,6 @@ const (
 	AlertTypeHighCPU AlertType = "HIGH_CPU"
 	AlertTypeHighMem AlertType = "HIGH_MEM"
 )
-
-//TODO: GetAlerts для хэндлера
 
 type Alert struct {
 	ID         int64
@@ -19,6 +20,16 @@ type Alert struct {
 	Resolved   bool
 	ResolvedAt *time.Time
 	Value      float64
+}
+
+// GetAlerts возвращает список алертов с возможностью выбрать только активные с помощью флага activeOnly
+func (s *System) GetAlerts(activeOnly bool) ([]Alert, error) {
+	alerts, err := s.repository.GetAlerts(activeOnly)
+	if err != nil {
+		return nil, fmt.Errorf("не удалось получить список алертов: %w", err)
+	}
+
+	return alerts, nil
 }
 
 type AlertState struct {

@@ -24,8 +24,6 @@ func (s *System) GetMetrics() Metrics {
 	return s.metrics
 }
 
-//TODO: тесты для GetHistory
-
 // GetHistory возвращает историю измерений метрик в заданных временных рамках
 func (s *System) GetHistory(from, to time.Time) ([]Metrics, error) {
 	metrics, err := s.repository.GetMetrics(from, to)
