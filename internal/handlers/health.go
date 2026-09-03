@@ -14,6 +14,8 @@ type HealthResponse struct {
 	LastCollection string `json:"last_collection,omitempty"`
 }
 
+// HealthHandler отвечает на запросы по адресу /health и возвращает статус сервиса, а также
+// ошибку или время последнего успешного сбора метрик в зависимости от статуса сервиса
 func (h *Handler) HealthHandler(rw http.ResponseWriter, r *http.Request) {
 	log.Println("[INFO] получен запрос по адресу /health")
 

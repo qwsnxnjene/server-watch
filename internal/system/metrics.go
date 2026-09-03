@@ -2,8 +2,6 @@ package system
 
 import (
 	"fmt"
-	"log"
-	"sync"
 	"time"
 )
 
@@ -15,20 +13,10 @@ type Metrics struct {
 	DiskUsage  float64
 	DiskUsed   float64
 	DiskTotal  float64
+	Timestamp  time.Time
 }
 
-type System struct {
-	mu          sync.RWMutex
-	metrics     Metrics
-	lastSuccess time.Time
-	lastError   error
-}
-
-func NewSystem() *System {
-	return &System{}
-}
-
-// GetMetrics возвращает копию метрик
+// GetMetrics возвращает копию актуальных метрик
 func (s *System) GetMetrics() Metrics {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -36,62 +24,12 @@ func (s *System) GetMetrics() Metrics {
 	return s.metrics
 }
 
-// CollectMetrics с помощью вспомогательных функций собирает свежие данные с ОС
-func (s *System) CollectMetrics() error {
-	usage, err := getCPUUsage()
+// GetHistory возвращает историю измерений метрик в заданных временных рамках
+func (s *System) GetHistory(from, to time.Time) ([]Metrics, error) {
+	metrics, err := s.repository.GetMetrics(from, to)
 	if err != nil {
-		errToReturn := fmt.Errorf("не удалось получить данные о загрузке CPU: %w", err)
-		s.mu.Lock()
-		s.lastError = errToReturn
-		s.mu.Unlock()
-
-		return errToReturn
+		return nil, fmt.Errorf("не удалось получить список измерений метрик: %w", err)
 	}
 
-	totalMem, usedMem, memUsage, err := readMemoryStats()
-	if err != nil {
-		errToReturn := fmt.Errorf("не удалось получить данные о памяти: %w", err)
-		s.mu.Lock()
-		s.lastError = errToReturn
-		s.mu.Unlock()
-
-		return errToReturn
-	}
-
-	totalDisk, usedDisk, diskUsage, err := getDiskStats()
-	if err != nil {
-		errToReturn := fmt.Errorf("не удалось получить данные о диске: %w", err)
-		s.mu.Lock()
-		s.lastError = errToReturn
-		s.mu.Unlock()
-
-		return errToReturn
-	}
-
-	metrics := Metrics{
-		CPUUsage:   usage,
-		MemUsage:   memUsage,
-		MemUsedMB:  usedMem,
-		MemTotalMB: totalMem,
-		DiskUsage:  diskUsage,
-		DiskUsed:   usedDisk,
-		DiskTotal:  totalDisk,
-	}
-
-	s.mu.Lock()
-	s.metrics = metrics
-	s.lastError = nil
-	s.lastSuccess = time.Now()
-	s.mu.Unlock()
-
-	log.Println("[INFO] метрики успешно обновлены")
-
-	return nil
-}
-
-func (s *System) GetHealth() (time.Time, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	return s.lastSuccess, s.lastError
+	return metrics, nil
 }

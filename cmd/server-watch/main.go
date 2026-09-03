@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"server-watch/internal/handlers"
+	"server-watch/internal/storage"
 	"server-watch/internal/system"
 	"sync"
 	"syscall"
@@ -20,8 +21,19 @@ func main() {
 
 	wg := sync.WaitGroup{}
 
-	sys := system.NewSystem()
-	err := sys.CollectMetrics()
+	db, err := storage.NewSQLite("server-watch.db")
+	if err != nil {
+		log.Fatalf("[ERROR] %v", err)
+	}
+	defer db.Close()
+
+	if err := storage.Migrate(db); err != nil {
+		log.Fatalf("[ERROR] %v", err)
+	}
+	repo := storage.NewSQLiteRepository(db)
+
+	sys := system.NewSystem(repo)
+	err = sys.CollectMetrics()
 	if err != nil {
 		log.Fatalf("[ERROR] не удалось прочитать метрики при запуске: %v", err)
 	}
@@ -46,16 +58,7 @@ func main() {
 		}
 	}(ctx)
 
-	handler := handlers.NewHandler(sys)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/metrics", handler.MetricsHandler)
-	mux.HandleFunc("/health", handler.HealthHandler)
-
-	server := http.Server{
-		Addr:    "localhost:8080",
-		Handler: mux,
-	}
+	server := newHTTPServer(sys)
 
 	go func() {
 		log.Printf("[INFO] сервер запущен на localhost:8080")
@@ -79,4 +82,19 @@ func main() {
 	}
 	log.Println("[INFO] выполнение программы остановлено")
 	wg.Wait()
+}
+
+func newHTTPServer(sys *system.System) *http.Server {
+	handler := handlers.NewHandler(sys)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/metrics", handler.MetricsHandler)
+	mux.HandleFunc("/health", handler.HealthHandler)
+	mux.HandleFunc("/history", handler.HistoryHandler)
+	mux.HandleFunc("/alerts", handler.AlertsHandler)
+
+	return &http.Server{
+		Addr:    "localhost:8080",
+		Handler: mux,
+	}
 }
