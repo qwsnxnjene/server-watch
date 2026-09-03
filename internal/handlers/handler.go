@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// System - интерфейс для уровня бизнес-логики
 type System interface {
 	GetMetrics() system.Metrics
 	GetHistory(from, to time.Time) ([]system.Metrics, error)

@@ -22,6 +22,8 @@ type AlertsResponse struct {
 	Alerts []AlertResponse `json:"alerts"`
 }
 
+// AlertsHandler отвечает за запросы по адресу /alerts и возвращает список всех/только активных алертов
+// в зависимости от значения параметра active_only
 func (h *Handler) AlertsHandler(rw http.ResponseWriter, r *http.Request) {
 	log.Println("[INFO] получен запрос по адресу /alerts")
 
@@ -36,7 +38,7 @@ func (h *Handler) AlertsHandler(rw http.ResponseWriter, r *http.Request) {
 	} else if activeOnly == "false" {
 		parsedActiveOnly = false
 	} else {
-		log.Printf("[ERROR] некорректное значение флага active_only: %v", activeOnly)
+		log.Printf("[ERROR] некорректное значение параметра active_only: %v", activeOnly)
 		http.Error(rw, "некорректное значение параметра active_only", http.StatusBadRequest)
 		return
 	}

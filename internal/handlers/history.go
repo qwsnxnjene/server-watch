@@ -11,6 +11,8 @@ type HistoryResponse struct {
 	Metrics []MetricsResponse `json:"metrics"`
 }
 
+// HistoryHandler отвечает на запросы по адресу /history и возвращает список измерений метрик
+// в заданный промежуток времени от from до to
 func (h *Handler) HistoryHandler(rw http.ResponseWriter, r *http.Request) {
 	log.Println("[INFO] получен запрос по адресу /history")
 

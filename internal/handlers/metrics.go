@@ -16,6 +16,8 @@ type MetricsResponse struct {
 	DiskTotalGB float64 `json:"disk_total_gb"`
 }
 
+// MetricsHandler отвечает на запросы по адресу /metrics и возвращает
+// актуальные на данный момент метрики
 func (h *Handler) MetricsHandler(rw http.ResponseWriter, r *http.Request) {
 	log.Println("[INFO] получен запрос по адресу /metrics")
 	rw.Header().Set("Content-Type", "application/json")

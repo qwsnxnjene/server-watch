@@ -15,6 +15,7 @@ const (
 	AlertResolveCount = 3
 )
 
+// System - системный слой, ответственный за бизнес-логику
 type System struct {
 	mu          sync.RWMutex
 	metrics     Metrics
@@ -83,6 +84,7 @@ func (s *System) CollectMetrics() error {
 		return errToReturn
 	}
 
+	// обновляем актуальные измерения метрик на данный момент
 	s.mu.Lock()
 	s.metrics = metrics
 	s.lastError = nil
@@ -101,83 +103,6 @@ func (s *System) CollectMetrics() error {
 	}
 
 	log.Println("[INFO] метрики успешно обновлены")
-
-	return nil
-}
-
-func (s *System) updateAlerts(metrics Metrics) {
-	s.AlertCPU.Record(metrics.CPUUsage, HighCPUThreshold)
-	s.AlertMem.Record(metrics.MemUsage, HighMemThreshold)
-}
-
-func (s *System) processAlerts(metrics Metrics) error {
-	if s.AlertCPU.HighThresholdReached() {
-		err := s.createAlertIfNeeded(AlertTypeHighCPU, metrics.CPUUsage, HighCPUThreshold)
-		if err != nil {
-			return fmt.Errorf("не удалось обработать алерт: %w", err)
-		}
-	}
-
-	if s.AlertCPU.ResolveThresholdReached() {
-		err := s.resolveAlertIfNeeded(AlertTypeHighCPU)
-		if err != nil {
-			return fmt.Errorf("не удалось обработать алерт: %w", err)
-		}
-	}
-
-	//с памятью точно также
-	if s.AlertMem.HighThresholdReached() {
-		err := s.createAlertIfNeeded(AlertTypeHighMem, metrics.MemUsage, HighMemThreshold)
-		if err != nil {
-			return fmt.Errorf("не удалось обработать алерт: %w", err)
-		}
-	}
-
-	if s.AlertMem.ResolveThresholdReached() {
-		err := s.resolveAlertIfNeeded(AlertTypeHighMem)
-		if err != nil {
-			return fmt.Errorf("не удалось обработать алерт: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func (s *System) createAlertIfNeeded(alertType AlertType, value float64, threshold float64) error {
-	alert, err := s.repository.GetActiveAlert(alertType)
-	if err != nil {
-		return fmt.Errorf("не удалось получить активный алерт типа %v: %w", alertType, err)
-	}
-	if alert == nil {
-		alertToSave := Alert{
-			Type:       alertType,
-			Timestamp:  time.Now(),
-			Threshold:  threshold,
-			Resolved:   false,
-			ResolvedAt: nil,
-			Value:      value,
-		}
-
-		_, err = s.repository.SaveAlert(alertToSave)
-		if err != nil {
-			return fmt.Errorf("не удалось сохранить новый алерт типа %v: %w", alertType, err)
-		}
-	}
-
-	return nil
-}
-
-func (s *System) resolveAlertIfNeeded(alertType AlertType) error {
-	alert, err := s.repository.GetActiveAlert(alertType)
-	if err != nil {
-		return fmt.Errorf("не удалось получить активный алерт типа %v: %w", alertType, err)
-	}
-	if alert != nil {
-		err = s.repository.ResolveAlert(alert.ID, time.Now())
-		if err != nil {
-			return fmt.Errorf("не удалось зарезолвить алерт типа %v: %w", alertType, err)
-		}
-	}
 
 	return nil
 }

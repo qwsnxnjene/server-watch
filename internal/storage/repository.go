@@ -18,6 +18,7 @@ func NewSQLiteRepository(db *sql.DB) *SQLiteRepository {
 	}
 }
 
+// SaveMetrics сохраняет измерение метрик в БД
 func (s *SQLiteRepository) SaveMetrics(metrics system.Metrics) error {
 	_, err := s.db.Exec(`
     INSERT INTO metrics (

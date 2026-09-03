@@ -16,7 +16,7 @@ type Metrics struct {
 	Timestamp  time.Time
 }
 
-// GetMetrics возвращает копию метрик
+// GetMetrics возвращает копию актуальных метрик
 func (s *System) GetMetrics() Metrics {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

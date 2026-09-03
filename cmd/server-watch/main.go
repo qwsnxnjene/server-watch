@@ -30,7 +30,6 @@ func main() {
 	if err := storage.Migrate(db); err != nil {
 		log.Fatalf("[ERROR] %v", err)
 	}
-
 	repo := storage.NewSQLiteRepository(db)
 
 	sys := system.NewSystem(repo)

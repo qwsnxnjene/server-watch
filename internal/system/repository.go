@@ -4,6 +4,7 @@ import (
 	"time"
 )
 
+// Repository - интерфейс для хранения данных
 type Repository interface {
 	SaveMetrics(metrics Metrics) error
 	SaveAlert(alert Alert) (int64, error)
