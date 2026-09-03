@@ -1,12 +1,22 @@
 package handlers
 
-import "server-watch/internal/system"
+import (
+	"server-watch/internal/system"
+	"time"
+)
 
-type Handler struct {
-	system *system.System
+type System interface {
+	GetMetrics() system.Metrics
+	GetHistory(from, to time.Time) ([]system.Metrics, error)
+	GetAlerts(activeOnly bool) ([]system.Alert, error)
+	GetHealth() (time.Time, error)
 }
 
-func NewHandler(sys *system.System) *Handler {
+type Handler struct {
+	system System
+}
+
+func NewHandler(sys System) *Handler {
 	return &Handler{
 		system: sys,
 	}

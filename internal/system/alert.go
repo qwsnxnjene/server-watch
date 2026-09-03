@@ -47,6 +47,8 @@ func (a *AlertState) Record(value float64, threshold float64) {
 	}
 }
 
+//TODO: логировать при превышении порогов
+
 func (a *AlertState) HighThresholdReached() bool {
 	return a.consecutiveHigh >= AlertTriggerCount
 }

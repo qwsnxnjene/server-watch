@@ -91,6 +91,8 @@ func newHTTPServer(sys *system.System) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/metrics", handler.MetricsHandler)
 	mux.HandleFunc("/health", handler.HealthHandler)
+	mux.HandleFunc("/history", handler.HistoryHandler)
+	mux.HandleFunc("/alerts", handler.AlertsHandler)
 
 	return &http.Server{
 		Addr:    "localhost:8080",
