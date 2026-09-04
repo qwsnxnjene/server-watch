@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"net/http"
 	"server-watch/internal/system"
 	"time"
 )
@@ -14,11 +15,13 @@ type System interface {
 }
 
 type Handler struct {
-	system System
+	system            System
+	prometheusHandler http.Handler
 }
 
-func NewHandler(sys System) *Handler {
+func NewHandler(sys System, promHandler http.Handler) *Handler {
 	return &Handler{
-		system: sys,
+		system:            sys,
+		prometheusHandler: promHandler,
 	}
 }

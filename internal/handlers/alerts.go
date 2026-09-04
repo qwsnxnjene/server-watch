@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"server-watch/internal/system"
 	"time"
@@ -25,7 +25,7 @@ type AlertsResponse struct {
 // AlertsHandler отвечает за запросы по адресу /alerts и возвращает список всех/только активных алертов
 // в зависимости от значения параметра active_only
 func (h *Handler) AlertsHandler(rw http.ResponseWriter, r *http.Request) {
-	log.Println("[INFO] получен запрос по адресу /alerts")
+	slog.Info("получен запрос", "path", "/alerts")
 
 	activeOnly := r.URL.Query().Get("active_only")
 	if activeOnly == "" {
@@ -38,14 +38,14 @@ func (h *Handler) AlertsHandler(rw http.ResponseWriter, r *http.Request) {
 	} else if activeOnly == "false" {
 		parsedActiveOnly = false
 	} else {
-		log.Printf("[ERROR] некорректное значение параметра active_only: %v", activeOnly)
+		slog.Warn("некорректное значение параметра active_only", "active_only", activeOnly)
 		http.Error(rw, "некорректное значение параметра active_only", http.StatusBadRequest)
 		return
 	}
 
 	alerts, err := h.system.GetAlerts(parsedActiveOnly)
 	if err != nil {
-		log.Printf("[ERROR] не удалось получить алерты: %v", err)
+		slog.Error("не удалось получить алерты", "error", err)
 		http.Error(rw, "ошибка получения списка алертов", http.StatusInternalServerError)
 		return
 	}
@@ -70,7 +70,7 @@ func (h *Handler) AlertsHandler(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(rw).Encode(response)
 	if err != nil {
-		log.Printf("не удалось сериализовать список алертов: %v", err)
+		slog.Error("не удалось сериализовать список алертов", "error", err)
 		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	}

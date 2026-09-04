@@ -3,7 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -17,14 +17,14 @@ type HealthResponse struct {
 // HealthHandler отвечает на запросы по адресу /health и возвращает статус сервиса, а также
 // ошибку или время последнего успешного сбора метрик в зависимости от статуса сервиса
 func (h *Handler) HealthHandler(rw http.ResponseWriter, r *http.Request) {
-	log.Println("[INFO] получен запрос по адресу /health")
+	slog.Info("получен запрос", "path", "/health")
 
 	rw.Header().Set("Content-Type", "application/json")
 
 	lastSuccess, lastError := h.system.GetHealth()
 
 	if lastSuccess.IsZero() {
-		log.Print("[ERROR] при запросе по /health ещё нет успешных чтений метрик")
+		slog.Error("при запросе по /health ещё нет успешных чтений метрик")
 		rw.WriteHeader(http.StatusServiceUnavailable)
 
 		response := HealthResponse{
@@ -34,14 +34,14 @@ func (h *Handler) HealthHandler(rw http.ResponseWriter, r *http.Request) {
 
 		err := json.NewEncoder(rw).Encode(response)
 		if err != nil {
-			log.Printf("[ERROR] не удалось записать ответ в JSON: %v", err)
+			slog.Error("не удалось записать ответ в JSON", "error", err)
 		}
 
 		return
 	}
 
 	if lastError != nil {
-		log.Printf("[ERROR] ошибка при чтении метрик: %v", lastError)
+		slog.Error("ошибка при чтении метрик", "error", lastError)
 		rw.WriteHeader(http.StatusServiceUnavailable)
 
 		response := HealthResponse{
@@ -51,13 +51,13 @@ func (h *Handler) HealthHandler(rw http.ResponseWriter, r *http.Request) {
 
 		err := json.NewEncoder(rw).Encode(response)
 		if err != nil {
-			log.Printf("[ERROR] не удалось записать ответ в JSON: %v", err)
+			slog.Error("не удалось записать ответ в JSON", "error", err)
 		}
 		return
 	}
 
 	if time.Since(lastSuccess) > time.Second*10 {
-		log.Print("[ERROR] последнее обновление данных случилось дольше 10 секунд назад")
+		slog.Error("последнее обновление данных случилось дольше 10 секунд назад")
 		rw.WriteHeader(http.StatusServiceUnavailable)
 
 		response := HealthResponse{
@@ -67,7 +67,7 @@ func (h *Handler) HealthHandler(rw http.ResponseWriter, r *http.Request) {
 
 		err := json.NewEncoder(rw).Encode(response)
 		if err != nil {
-			log.Printf("[ERROR] не удалось записать ответ в JSON: %v", err)
+			slog.Error("не удалось записать ответ в JSON", "error", err)
 		}
 
 		return
@@ -79,6 +79,6 @@ func (h *Handler) HealthHandler(rw http.ResponseWriter, r *http.Request) {
 	}
 	err := json.NewEncoder(rw).Encode(response)
 	if err != nil {
-		log.Printf("[ERROR] не удалось записать ответ в JSON: %v", err)
+		slog.Error("не удалось записать ответ в JSON", "error", err)
 	}
 }
