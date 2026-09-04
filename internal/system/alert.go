@@ -2,7 +2,7 @@ package system
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 )
 
@@ -60,6 +60,22 @@ func (a *AlertState) ResolveThresholdReached() bool {
 }
 
 func (s *System) updateAlerts(metrics Metrics) {
+	if metrics.CPUUsage > HighCPUThreshold {
+		slog.Warn(
+			"превышен порог CPU",
+			"value", metrics.CPUUsage,
+			"threshold", HighCPUThreshold,
+		)
+	}
+
+	if metrics.MemUsage > HighMemThreshold {
+		slog.Warn(
+			"превышен порог памяти",
+			"value", metrics.MemUsage,
+			"threshold", HighMemThreshold,
+		)
+	}
+
 	// обновляем данные об алертах для процессора и памяти
 	s.AlertCPU.Record(metrics.CPUUsage, HighCPUThreshold)
 	s.AlertMem.Record(metrics.MemUsage, HighMemThreshold)
@@ -121,8 +137,10 @@ func (s *System) createAlertIfNeeded(alertType AlertType, value float64, thresho
 		if err != nil {
 			return fmt.Errorf("не удалось сохранить новый алерт типа %v: %w", alertType, err)
 		}
-		log.Printf("[INFO] создан новый алерт!\nтип: %v, порог: %v, значение: %v",
-			alertToSave.Type, alertToSave.Threshold, alertToSave.Value)
+		slog.Info("создан новый алерт!",
+			"type", alertToSave.Type,
+			"threshold", alertToSave.Threshold,
+			"value", alertToSave.Value)
 	}
 
 	return nil
@@ -140,8 +158,9 @@ func (s *System) resolveAlertIfNeeded(alertType AlertType) error {
 		if err != nil {
 			return fmt.Errorf("не удалось зарезолвить алерт типа %v: %w", alertType, err)
 		}
-		log.Printf("[INFO] зарезолвлен алерт!\nтип: %v, значение: %v",
-			alert.Type, alert.Value)
+		slog.Info("зарезолвлен алерт!",
+			"type", alert.Type,
+			"value", alert.Value)
 	}
 
 	return nil

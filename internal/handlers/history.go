@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -14,7 +14,7 @@ type HistoryResponse struct {
 // HistoryHandler отвечает на запросы по адресу /history и возвращает список измерений метрик
 // в заданный промежуток времени от from до to
 func (h *Handler) HistoryHandler(rw http.ResponseWriter, r *http.Request) {
-	log.Println("[INFO] получен запрос по адресу /history")
+	slog.Info("получен запрос", "path", "/history")
 
 	from, to := r.URL.Query().Get("from"), r.URL.Query().Get("to")
 	if from == "" {
@@ -26,27 +26,27 @@ func (h *Handler) HistoryHandler(rw http.ResponseWriter, r *http.Request) {
 
 	parsedFrom, err := time.Parse(time.RFC3339, from)
 	if err != nil {
-		log.Printf("[ERROR] некорректное значение параметра from в запросе: %v", from)
+		slog.Warn("некорректное значение параметра from в запросе", "from", from)
 		http.Error(rw, "некорректное значение параметра from", http.StatusBadRequest)
 		return
 	}
 
 	parsedTo, err := time.Parse(time.RFC3339, to)
 	if err != nil {
-		log.Printf("[ERROR] некорректное значение параметра to в запросе: %v", to)
+		slog.Warn("некорректное значение параметра to в запросе", "to", to)
 		http.Error(rw, "некорректное значение параметра to", http.StatusBadRequest)
 		return
 	}
 
 	if parsedFrom.After(parsedTo) {
-		log.Printf("[ERROR] параметр from не может быть позже параметра to\nfrom: %v, to: %v", from, to)
+		slog.Warn("параметр from не может быть позже параметра to", "from", from, "to", to)
 		http.Error(rw, "параметр from не может быть позже параметра to", http.StatusBadRequest)
 		return
 	}
 
 	metrics, err := h.system.GetHistory(parsedFrom, parsedTo)
 	if err != nil {
-		log.Printf("[ERROR] ошибка получения истории измерения метрик: %v", err)
+		slog.Error("ошибка получения истории измерения метрик", "error", err)
 		http.Error(rw, "не удалось получить историю измерения метрик", http.StatusInternalServerError)
 		return
 	}
@@ -71,7 +71,7 @@ func (h *Handler) HistoryHandler(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(rw).Encode(response)
 	if err != nil {
-		log.Printf("[ERROR] не удалось сериализовать историю метрик: %v", err)
+		slog.Error("не удалось сериализовать историю метрик", "error", err)
 		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	}

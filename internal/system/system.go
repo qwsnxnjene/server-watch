@@ -2,7 +2,7 @@ package system
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -102,7 +102,7 @@ func (s *System) CollectMetrics() error {
 		return errToReturn
 	}
 
-	log.Println("[INFO] метрики успешно обновлены")
+	slog.Info("метрики успешно обновлены")
 
 	return nil
 }

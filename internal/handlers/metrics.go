@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 )
 
@@ -19,7 +19,7 @@ type MetricsResponse struct {
 // MetricsHandler отвечает на запросы по адресу /metrics и возвращает
 // актуальные на данный момент метрики
 func (h *Handler) MetricsHandler(rw http.ResponseWriter, r *http.Request) {
-	log.Println("[INFO] получен запрос по адресу /metrics")
+	slog.Info("получен запрос", "path", "/metrics")
 	rw.Header().Set("Content-Type", "application/json")
 
 	metrics := h.system.GetMetrics()
@@ -36,7 +36,7 @@ func (h *Handler) MetricsHandler(rw http.ResponseWriter, r *http.Request) {
 
 	err := json.NewEncoder(rw).Encode(response)
 	if err != nil {
-		log.Printf("[ERROR] не удалось сериализовать метрики: %v", err)
+		slog.Error("не удалось сериализовать метрики", "error", err)
 		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	}

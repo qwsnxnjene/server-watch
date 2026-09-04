@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,6 +16,11 @@ import (
 )
 
 func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
@@ -23,19 +28,22 @@ func main() {
 
 	db, err := storage.NewSQLite("server-watch.db")
 	if err != nil {
-		log.Fatalf("[ERROR] %v", err)
+		slog.Error("не удалось создать/открыть SQLite базу данных", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
 
 	if err := storage.Migrate(db); err != nil {
-		log.Fatalf("[ERROR] %v", err)
+		slog.Error("не удалось провести миграцию", "error", err)
+		os.Exit(1)
 	}
 	repo := storage.NewSQLiteRepository(db)
 
 	sys := system.NewSystem(repo)
 	err = sys.CollectMetrics()
 	if err != nil {
-		log.Fatalf("[ERROR] не удалось прочитать метрики при запуске: %v", err)
+		slog.Error("не удалось прочитать метрики при запуске", "error", err)
+		os.Exit(1)
 	}
 
 	wg.Add(1)
@@ -49,10 +57,11 @@ func main() {
 			case <-ticker.C:
 				err := sys.CollectMetrics()
 				if err != nil {
-					log.Printf("[ERROR] не удалось прочитать метрики: %v", err)
+					slog.Error("не удалось прочитать метрики", "error", err)
+					os.Exit(1)
 				}
 			case <-ctx.Done():
-				log.Printf("[INFO] останавливаем обновление метрик")
+				slog.Info("останавливаем обновление метрик")
 				return
 			}
 		}
@@ -61,26 +70,28 @@ func main() {
 	server := newHTTPServer(sys)
 
 	go func() {
-		log.Printf("[INFO] сервер запущен на localhost:8080")
+		slog.Info("сервер запущен на localhost:8080")
 		if err := server.ListenAndServe(); err != nil {
 			if errors.Is(err, http.ErrServerClosed) {
-				log.Print("[INFO] сервер корректно завершил свою работу")
+				slog.Info("сервер корректно завершил свою работу")
 			} else {
-				log.Printf("[ERROR] сервер завершил работу: %v", err)
+				slog.Error("сервер завершил работу", "error", err)
+				os.Exit(1)
 			}
 		}
 	}()
 
 	<-ctx.Done()
-	log.Printf("[INFO] получен сигнал остановки, начинаем процесс graceful shutdown...")
+	slog.Info("получен сигнал остановки, начинаем процесс graceful shutdown")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("[ERROR] ошибка при остановке сервера: %v", err)
+		slog.Error("ошибка при остановке сервера", "error", err)
+		os.Exit(1)
 	}
-	log.Println("[INFO] выполнение программы остановлено")
+	slog.Info("выполнение программы остановлено")
 	wg.Wait()
 }
 
