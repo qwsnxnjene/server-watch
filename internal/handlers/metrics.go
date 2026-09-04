@@ -2,8 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
+	"mime"
 	"net/http"
+	"strings"
 )
 
 type MetricsResponse struct {
@@ -22,8 +25,14 @@ func (h *Handler) MetricsHandler(rw http.ResponseWriter, r *http.Request) {
 	slog.Info("получен запрос", "path", "/metrics")
 
 	// перенаправляем на Prometheus
-	if r.Header.Get("Accept") == "text/plain" {
-		h.prometheusHandler.ServeHTTP(rw, r)
+	if ok, err := acceptsPrometheus(r); err == nil {
+		if ok {
+			h.prometheusHandler.ServeHTTP(rw, r)
+			return
+		}
+	} else {
+		slog.Error("не удалось спарсить Accept", "error", err)
+		http.Error(rw, "не удалось спарсить Accept", http.StatusInternalServerError)
 		return
 	}
 
@@ -47,4 +56,23 @@ func (h *Handler) MetricsHandler(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+}
+
+func acceptsPrometheus(r *http.Request) (bool, error) {
+	for _, accept := range strings.Split(r.Header.Get("Accept"), ",") {
+		mediaType, params, err := mime.ParseMediaType(accept)
+		if err != nil {
+			return false, fmt.Errorf("не удалось спарсить Accept: %w", err)
+		}
+
+		if params["q"] == "0" {
+			continue
+		}
+
+		if mediaType == "text/plain" || mediaType == "application/openmetrics-text" {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
