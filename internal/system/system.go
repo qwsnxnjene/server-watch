@@ -91,6 +91,8 @@ func (s *System) CollectMetrics() error {
 	s.lastSuccess = metrics.Timestamp
 	s.mu.Unlock()
 
+	updatePrometheusMetrics(metrics)
+
 	s.updateAlerts(metrics)
 
 	err = s.processAlerts(metrics)

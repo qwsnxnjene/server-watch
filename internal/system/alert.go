@@ -141,6 +141,8 @@ func (s *System) createAlertIfNeeded(alertType AlertType, value float64, thresho
 			"type", alertToSave.Type,
 			"threshold", alertToSave.Threshold,
 			"value", alertToSave.Value)
+		alertsTotal.Inc()
+		alertsActiveTotal.Inc()
 	}
 
 	return nil
@@ -158,9 +160,10 @@ func (s *System) resolveAlertIfNeeded(alertType AlertType) error {
 		if err != nil {
 			return fmt.Errorf("не удалось зарезолвить алерт типа %v: %w", alertType, err)
 		}
-		slog.Info("зарезолвлен алерт!",
+		slog.Info("зарезолвлен алерт",
 			"type", alert.Type,
 			"value", alert.Value)
+		alertsActiveTotal.Dec()
 	}
 
 	return nil

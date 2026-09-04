@@ -20,6 +20,13 @@ type MetricsResponse struct {
 // актуальные на данный момент метрики
 func (h *Handler) MetricsHandler(rw http.ResponseWriter, r *http.Request) {
 	slog.Info("получен запрос", "path", "/metrics")
+
+	// перенаправляем на Prometheus
+	if r.Header.Get("Accept") == "text/plain" {
+		h.prometheusHandler.ServeHTTP(rw, r)
+		return
+	}
+
 	rw.Header().Set("Content-Type", "application/json")
 
 	metrics := h.system.GetMetrics()

@@ -24,8 +24,6 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	wg := sync.WaitGroup{}
-
 	db, err := storage.NewSQLite("server-watch.db")
 	if err != nil {
 		slog.Error("не удалось создать/открыть SQLite базу данных", "error", err)
@@ -46,6 +44,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = system.RegisterPrometheusMetrics(); err != nil {
+		slog.Error("не удалось зарегистрировать метрики Prometheus", "error", err)
+		os.Exit(1)
+	}
+	promHandler := system.PrometheusHandler()
+
+	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func(ctx context.Context) {
 		ticker := time.NewTicker(time.Second * 5)
@@ -67,7 +72,7 @@ func main() {
 		}
 	}(ctx)
 
-	server := newHTTPServer(sys)
+	server := newHTTPServer(sys, &promHandler)
 
 	go func() {
 		slog.Info("сервер запущен на localhost:8080")
@@ -95,8 +100,8 @@ func main() {
 	wg.Wait()
 }
 
-func newHTTPServer(sys *system.System) *http.Server {
-	handler := handlers.NewHandler(sys)
+func newHTTPServer(sys *system.System, promHandler *http.Handler) *http.Server {
+	handler := handlers.NewHandler(sys, *promHandler)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/metrics", handler.MetricsHandler)
