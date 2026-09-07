@@ -24,14 +24,15 @@ type System struct {
 	lastError   error
 	repository  Repository
 
-	config config.Config
+	config     config.Config
+	configPath string
 
 	AlertCPU AlertState
 	AlertMem AlertState
 }
 
-func NewSystem(repository Repository, cfg config.Config) *System {
-	return &System{repository: repository, config: cfg}
+func NewSystem(repository Repository, cfg config.Config, path string) *System {
+	return &System{repository: repository, config: cfg, configPath: path}
 }
 
 // CollectMetrics с помощью вспомогательных функций собирает свежие данные с ОС

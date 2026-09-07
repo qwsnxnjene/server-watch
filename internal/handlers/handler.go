@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"server-watch/internal/config"
 	"server-watch/internal/system"
 	"time"
 )
@@ -12,6 +13,9 @@ type System interface {
 	GetHistory(from, to time.Time) ([]system.Metrics, error)
 	GetAlerts(activeOnly bool) ([]system.Alert, error)
 	GetHealth() (time.Time, error)
+
+	UpdateConfig(updatedCfg system.ConfigUpdate) error
+	GetConfig() config.Config
 }
 
 type Handler struct {

@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"server-watch/internal/config"
 	"server-watch/internal/system"
+	"strings"
 	"testing"
 	"time"
 )
@@ -25,6 +27,10 @@ type FakeSystem struct {
 	alertsErr        error
 	alertsActiveOnly bool
 	alerts           []system.Alert
+
+	cfg              config.Config
+	configErr        error
+	lastConfigUpdate system.ConfigUpdate
 }
 
 func (f *FakeSystem) GetMetrics() system.Metrics {
@@ -54,6 +60,19 @@ func (f *FakeSystem) GetAlerts(activeOnly bool) ([]system.Alert, error) {
 
 func (f *FakeSystem) GetHealth() (time.Time, error) {
 	return f.lastSuccess, f.lastError
+}
+
+func (f *FakeSystem) UpdateConfig(updatedCfg system.ConfigUpdate) error {
+	if f.configErr != nil {
+		return f.configErr
+	}
+
+	f.lastConfigUpdate = updatedCfg
+	return f.configErr
+}
+
+func (f *FakeSystem) GetConfig() config.Config {
+	return f.cfg
 }
 
 func TestHandler_MetricsHandler(t *testing.T) {
@@ -596,5 +615,93 @@ func TestHandler_AlertsHandler_GetAlertsError(t *testing.T) {
 	if rw.Code != http.StatusInternalServerError {
 		t.Fatalf("ожидался код ответа %v, получили %v",
 			http.StatusInternalServerError, rw.Code)
+	}
+}
+
+func TestHandler_ConfigHandler_Correct(t *testing.T) {
+	fakeSystem := &FakeSystem{
+		cfg: config.Config{
+			CPUThreshold: 45,
+			MemThreshold: 90,
+			TriggerCount: 3,
+			ResolveCount: 3,
+			SlackEnabled: false,
+			SlackURL:     "",
+		},
+	}
+
+	prometheusHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := NewHandler(fakeSystem, prometheusHandler)
+
+	req := httptest.NewRequest(http.MethodPost,
+		"/config",
+		strings.NewReader(`{"cpu_threshold":45}`))
+	rw := httptest.NewRecorder()
+
+	handler.ConfigHandler(rw, req)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("ожидали код ответа %v, получили %v", http.StatusOK, rw.Code)
+	}
+
+	var got config.Config
+	err := json.NewDecoder(rw.Body).Decode(&got)
+	if err != nil {
+		t.Fatalf("не удалось декодировать ответ: %v", err)
+	}
+
+	if got != fakeSystem.cfg {
+		t.Fatalf("ожидали %+v, получили %+v", fakeSystem.cfg, got)
+	}
+}
+
+func TestHandler_ConfigHandler_Invalid(t *testing.T) {
+	tests := []struct {
+		name      string
+		data      string
+		wantCode  int
+		configErr error
+	}{
+		{
+			name:     "некорректный JSON",
+			data:     `{"cpu_threshold":}`,
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:      "невалидная конфигурация",
+			data:      `{"cpu_threshold":130}`,
+			wantCode:  http.StatusBadRequest,
+			configErr: config.ErrInvalidConfig,
+		},
+		{
+			name:      "ошибка UpdateConfig",
+			data:      `{"cpu_threshold":70}`,
+			wantCode:  http.StatusInternalServerError,
+			configErr: errors.New("не удалось обновить конфиг"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeSystem := &FakeSystem{
+				configErr: tt.configErr,
+			}
+
+			prometheusHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			})
+			handler := NewHandler(fakeSystem, prometheusHandler)
+
+			req := httptest.NewRequest(http.MethodPost,
+				"/config",
+				strings.NewReader(tt.data))
+			rw := httptest.NewRecorder()
+
+			handler.ConfigHandler(rw, req)
+			if rw.Code != tt.wantCode {
+				t.Fatalf("ожидали код ответа %v, получили %v", tt.wantCode, rw.Code)
+			}
+		})
 	}
 }

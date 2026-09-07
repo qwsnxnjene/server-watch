@@ -12,6 +12,7 @@ import (
 )
 
 var ErrInvalidYAML = errors.New("некорректный YAML")
+var ErrInvalidConfig = errors.New("некорректная конфигурация")
 
 type Config struct {
 	CPUThreshold float64 `yaml:"cpu_threshold"`
@@ -35,7 +36,7 @@ func Load(path string) (Config, error) {
 
 		if errors.Is(err, os.ErrNotExist) {
 			slog.Info("файл конфигурации не найден", "path", path)
-			err = saveToYAML(path, cfg)
+			err = SaveToYAML(path, cfg)
 			if err != nil {
 				return Config{}, err
 			}
@@ -59,27 +60,30 @@ func Load(path string) (Config, error) {
 
 func Validate(cfg Config) error {
 	if cfg.CPUThreshold < 0 || cfg.CPUThreshold > 100 {
-		return fmt.Errorf("значение CPUThreshold должно быть от 0 до 100, получили: %v",
-			cfg.CPUThreshold)
+		return fmt.Errorf("%w: значение CPUThreshold должно быть от 0 до 100, получили: %v",
+			ErrInvalidConfig, cfg.CPUThreshold)
 	}
 
 	if cfg.MemThreshold < 0 || cfg.MemThreshold > 100 {
-		return fmt.Errorf("значение MemThreshold должно быть от 0 до 100, получили: %v",
-			cfg.MemThreshold)
+		return fmt.Errorf("%w: значение MemThreshold должно быть от 0 до 100, получили: %v",
+			ErrInvalidConfig, cfg.MemThreshold)
 	}
 
 	if cfg.TriggerCount <= 0 {
-		return fmt.Errorf("значение TriggerCount должно быть >0, получили: %v", cfg.TriggerCount)
+		return fmt.Errorf("%w: значение TriggerCount должно быть >0, получили: %v",
+			ErrInvalidConfig, cfg.TriggerCount)
 	}
 
 	if cfg.ResolveCount <= 0 {
-		return fmt.Errorf("значение ResolveCount должно быть >0, получили: %v", cfg.ResolveCount)
+		return fmt.Errorf("%w: значение ResolveCount должно быть >0, получили: %v",
+			ErrInvalidConfig, cfg.ResolveCount)
 	}
 
 	skipValidation := cfg.SlackURL == "" && !cfg.SlackEnabled
 
 	if !validateURL(cfg.SlackURL) && !skipValidation {
-		return fmt.Errorf("значение SlackURL некорректно: %v", cfg.SlackURL)
+		return fmt.Errorf("%w: значение SlackURL некорректно: %v",
+			ErrInvalidConfig, cfg.SlackURL)
 	}
 
 	return nil
@@ -187,7 +191,7 @@ func loadFromYAML(path string, cfg *Config) error {
 	return nil
 }
 
-func saveToYAML(path string, cfg Config) error {
+func SaveToYAML(path string, cfg Config) error {
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("не удалось закодировать конфигурацию в yaml: %w", err)

@@ -52,7 +52,7 @@ func main() {
 		"slack_url", cfg.SlackURL,
 	)
 
-	sys := system.NewSystem(repo, cfg)
+	sys := system.NewSystem(repo, cfg, "config.yaml")
 	err = sys.CollectMetrics()
 	if err != nil {
 		slog.Error("не удалось прочитать метрики при запуске", "error", err)

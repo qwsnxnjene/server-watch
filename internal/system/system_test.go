@@ -3,6 +3,7 @@ package system
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"server-watch/internal/config"
 	"testing"
 	"time"
@@ -107,7 +108,7 @@ func (f *FakeRepository) GetActiveAlert(alertType AlertType) (*Alert, error) {
 }
 
 func newTestSystem(fakeRepo *FakeRepository) *System {
-	return NewSystem(fakeRepo, config.Config{})
+	return NewSystem(fakeRepo, config.Config{}, "")
 }
 
 func TestSystem_CollectMetrics(t *testing.T) {
@@ -577,5 +578,111 @@ func TestSystem_GetAlerts_Error(t *testing.T) {
 	_, err := system.GetAlerts(true)
 	if !errors.Is(err, fakeErr) {
 		t.Fatalf("ожидали ошибку %v, получили %v", fakeErr, err)
+	}
+}
+
+func TestSystem_UpdateConfig(t *testing.T) {
+	fakeRepo := FakeRepository{}
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+
+	initialCfg := config.DefaultConfig()
+	sys := NewSystem(&fakeRepo, initialCfg, configPath)
+
+	cpuCorrect := 45.0
+
+	updatedCfg := ConfigUpdate{
+		CPUThreshold: &cpuCorrect,
+	}
+
+	want := config.Config{
+		CPUThreshold: cpuCorrect,
+		MemThreshold: 90,
+		TriggerCount: 3,
+		ResolveCount: 3,
+		SlackEnabled: false,
+		SlackURL:     "",
+	}
+
+	err := sys.UpdateConfig(updatedCfg)
+	if err != nil {
+		t.Fatalf("не удалось обновить конфигурацию: %v", err)
+	}
+
+	if want != sys.config {
+		t.Fatalf("ожидали %+v, получили %+v", want, sys.config)
+	}
+
+	gotFromFile, err := config.Load(configPath)
+	if err != nil {
+		t.Fatalf("не удалось прочитать конфигурацию из файла: %v", err)
+	}
+
+	if want != gotFromFile {
+		t.Fatalf("ожидали в YAML %+v, получили %+v", want, gotFromFile)
+	}
+}
+
+func TestSystem_UpdateConfig_InvalidConfig(t *testing.T) {
+	fakeRepo := FakeRepository{}
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+
+	initialCfg := config.DefaultConfig()
+	sys := NewSystem(&fakeRepo, initialCfg, configPath)
+
+	cpuInvalid := 135.0
+
+	updatedCfg := ConfigUpdate{
+		CPUThreshold: &cpuInvalid,
+	}
+
+	want := config.Config{
+		CPUThreshold: 80,
+		MemThreshold: 90,
+		TriggerCount: 3,
+		ResolveCount: 3,
+		SlackEnabled: false,
+		SlackURL:     "",
+	}
+
+	err := sys.UpdateConfig(updatedCfg)
+	if !errors.Is(err, config.ErrInvalidConfig) {
+		t.Fatalf("ожидали ошибку %v, получили ошибку %v", config.ErrInvalidConfig, err)
+	}
+
+	if want != sys.config {
+		t.Fatalf("ожидали %+v, получили %+v", want, sys.config)
+	}
+}
+
+func TestSystem_UpdateConfig_SaveError(t *testing.T) {
+	fakeRepo := FakeRepository{}
+
+	configPath := t.TempDir()
+
+	initialCfg := config.DefaultConfig()
+	sys := NewSystem(&fakeRepo, initialCfg, configPath)
+
+	cpuNew := 70.0
+
+	updatedCfg := ConfigUpdate{
+		CPUThreshold: &cpuNew,
+	}
+
+	err := sys.UpdateConfig(updatedCfg)
+	if err == nil {
+		t.Fatal("ожидали ошибку сохранения конфигурации")
+	}
+
+	want := config.Config{
+		CPUThreshold: 70,
+		MemThreshold: 90,
+		TriggerCount: 3,
+		ResolveCount: 3,
+		SlackEnabled: false,
+		SlackURL:     "",
+	}
+
+	if want != sys.config {
+		t.Fatalf("ожидали %+v, получили %+v", want, sys.config)
 	}
 }
