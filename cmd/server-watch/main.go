@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"server-watch/internal/config"
 	"server-watch/internal/handlers"
 	"server-watch/internal/storage"
 	"server-watch/internal/system"
@@ -37,7 +38,21 @@ func main() {
 	}
 	repo := storage.NewSQLiteRepository(db)
 
-	sys := system.NewSystem(repo)
+	cfg, err := config.Load("config.yaml")
+	if err != nil {
+		slog.Error("не удалось загрузить конфигурацию", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("конфигурация загружена",
+		"cpu_threshold", cfg.CPUThreshold,
+		"mem_threshold", cfg.MemThreshold,
+		"trigger_count", cfg.TriggerCount,
+		"resolve_count", cfg.ResolveCount,
+		"slack_enabled", cfg.SlackEnabled,
+		"slack_url", cfg.SlackURL,
+	)
+
+	sys := system.NewSystem(repo, cfg)
 	err = sys.CollectMetrics()
 	if err != nil {
 		slog.Error("не удалось прочитать метрики при запуске", "error", err)

@@ -3,6 +3,7 @@ package system
 import (
 	"errors"
 	"fmt"
+	"server-watch/internal/config"
 	"testing"
 	"time"
 )
@@ -106,7 +107,7 @@ func (f *FakeRepository) GetActiveAlert(alertType AlertType) (*Alert, error) {
 }
 
 func newTestSystem(fakeRepo *FakeRepository) *System {
-	return NewSystem(fakeRepo)
+	return NewSystem(fakeRepo, config.Config{})
 }
 
 func TestSystem_CollectMetrics(t *testing.T) {

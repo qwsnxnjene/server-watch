@@ -59,6 +59,11 @@ func (h *Handler) MetricsHandler(rw http.ResponseWriter, r *http.Request) {
 }
 
 func acceptsPrometheus(r *http.Request) (bool, error) {
+	acc := r.Header.Get("Accept")
+	if acc == "" {
+		return false, nil
+	}
+
 	for _, accept := range strings.Split(r.Header.Get("Accept"), ",") {
 		mediaType, params, err := mime.ParseMediaType(accept)
 		if err != nil {

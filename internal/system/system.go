@@ -3,6 +3,7 @@ package system
 import (
 	"fmt"
 	"log/slog"
+	"server-watch/internal/config"
 	"sync"
 	"time"
 )
@@ -23,12 +24,14 @@ type System struct {
 	lastError   error
 	repository  Repository
 
+	config config.Config
+
 	AlertCPU AlertState
 	AlertMem AlertState
 }
 
-func NewSystem(repository Repository) *System {
-	return &System{repository: repository}
+func NewSystem(repository Repository, cfg config.Config) *System {
+	return &System{repository: repository, config: cfg}
 }
 
 // CollectMetrics с помощью вспомогательных функций собирает свежие данные с ОС
