@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/redis/go-redis/v9"
 	"server-watch/internal/system"
 	"strconv"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 var ErrCacheMiss = errors.New("метрики отсутствуют в кэше")
@@ -15,42 +16,44 @@ var ErrCacheMiss = errors.New("метрики отсутствуют в кэше
 type RedisMetricsCache struct {
 	client *redis.Client
 	ttl    time.Duration
+	prefix string
 }
 
-func NewRedisMetricsCache(client *redis.Client) *RedisMetricsCache {
+func NewRedisMetricsCache(client *redis.Client, ttl time.Duration, prefix string) *RedisMetricsCache {
 	return &RedisMetricsCache{
 		client: client,
-		ttl:    30 * time.Second,
+		ttl:    ttl,
+		prefix: prefix,
 	}
 }
 
 func (r *RedisMetricsCache) SetMetrics(metrics system.Metrics) error {
-	err := r.setMetric("metrics:cpu", fmt.Sprintf("%.2f", metrics.CPUUsage))
+	err := r.setMetric(r.prefix+"cpu", fmt.Sprintf("%.2f", metrics.CPUUsage))
 	if err != nil {
 		return err
 	}
 
-	err = r.setMetric("metrics:mem_used", fmt.Sprintf("%.2f", metrics.MemUsedMB))
+	err = r.setMetric(r.prefix+"mem_used", fmt.Sprintf("%.2f", metrics.MemUsedMB))
 	if err != nil {
 		return err
 	}
 
-	err = r.setMetric("metrics:mem_total", fmt.Sprintf("%.2f", metrics.MemTotalMB))
+	err = r.setMetric(r.prefix+"mem_total", fmt.Sprintf("%.2f", metrics.MemTotalMB))
 	if err != nil {
 		return err
 	}
 
-	err = r.setMetric("metrics:disk_used", fmt.Sprintf("%.2f", metrics.DiskUsed))
+	err = r.setMetric(r.prefix+"disk_used", fmt.Sprintf("%.2f", metrics.DiskUsed))
 	if err != nil {
 		return err
 	}
 
-	err = r.setMetric("metrics:disk_total", fmt.Sprintf("%.2f", metrics.DiskTotal))
+	err = r.setMetric(r.prefix+"disk_total", fmt.Sprintf("%.2f", metrics.DiskTotal))
 	if err != nil {
 		return err
 	}
 
-	err = r.setMetric("metrics:timestamp", metrics.Timestamp.Format(time.RFC3339))
+	err = r.setMetric(r.prefix+"timestamp", metrics.Timestamp.Format(time.RFC3339))
 	if err != nil {
 		return err
 	}
@@ -73,37 +76,37 @@ func (r *RedisMetricsCache) setMetric(key, value string) error {
 func (r *RedisMetricsCache) GetMetrics() (system.Metrics, error) {
 	metricsToReturn := system.Metrics{}
 
-	cpuUsage, err := r.getFloatMetric("metrics:cpu")
+	cpuUsage, err := r.getFloatMetric(r.prefix + "cpu")
 	if err != nil {
 		return system.Metrics{}, err
 	}
 	metricsToReturn.CPUUsage = cpuUsage
 
-	memUsed, err := r.getFloatMetric("metrics:mem_used")
+	memUsed, err := r.getFloatMetric(r.prefix + "mem_used")
 	if err != nil {
 		return system.Metrics{}, err
 	}
 	metricsToReturn.MemUsedMB = memUsed
 
-	memTotal, err := r.getFloatMetric("metrics:mem_total")
+	memTotal, err := r.getFloatMetric(r.prefix + "mem_total")
 	if err != nil {
 		return system.Metrics{}, err
 	}
 	metricsToReturn.MemTotalMB = memTotal
 
-	diskUsed, err := r.getFloatMetric("metrics:disk_used")
+	diskUsed, err := r.getFloatMetric(r.prefix + "disk_used")
 	if err != nil {
 		return system.Metrics{}, err
 	}
 	metricsToReturn.DiskUsed = diskUsed
 
-	diskTotal, err := r.getFloatMetric("metrics:disk_total")
+	diskTotal, err := r.getFloatMetric(r.prefix + "disk_total")
 	if err != nil {
 		return system.Metrics{}, err
 	}
 	metricsToReturn.DiskTotal = diskTotal
 
-	ts, err := r.client.Get(context.Background(), "metrics:timestamp").Result()
+	ts, err := r.client.Get(context.Background(), r.prefix+"timestamp").Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return system.Metrics{}, ErrCacheMiss
@@ -121,12 +124,12 @@ func (r *RedisMetricsCache) GetMetrics() (system.Metrics, error) {
 	if memTotal == 0 {
 		return system.Metrics{}, errors.New("memTotal равен нулю")
 	}
-	metricsToReturn.MemUsage = memUsed / memTotal
+	metricsToReturn.MemUsage = memUsed / memTotal * 100
 
 	if diskTotal == 0 {
 		return system.Metrics{}, errors.New("diskTotal равен нулю")
 	}
-	metricsToReturn.DiskUsage = diskUsed / diskTotal
+	metricsToReturn.DiskUsage = diskUsed / diskTotal * 100
 
 	return metricsToReturn, nil
 }
