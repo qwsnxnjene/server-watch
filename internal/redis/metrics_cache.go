@@ -11,8 +11,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-var ErrCacheMiss = errors.New("метрики отсутствуют в кэше")
-
 type RedisMetricsCache struct {
 	client *redis.Client
 	ttl    time.Duration
@@ -109,7 +107,7 @@ func (r *RedisMetricsCache) GetMetrics() (system.Metrics, error) {
 	ts, err := r.client.Get(context.Background(), r.prefix+"timestamp").Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return system.Metrics{}, ErrCacheMiss
+			return system.Metrics{}, system.ErrCacheMiss
 		}
 		return system.Metrics{}, fmt.Errorf("не удалось получить Timestamp из кэша: %w", err)
 	}
@@ -138,7 +136,7 @@ func (r *RedisMetricsCache) getFloatMetric(key string) (float64, error) {
 	metric, err := r.client.Get(context.Background(), key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return 0, ErrCacheMiss
+			return 0, system.ErrCacheMiss
 		}
 		return 0, fmt.Errorf("не удалось получить %v из кэша: %w", key, err)
 	}

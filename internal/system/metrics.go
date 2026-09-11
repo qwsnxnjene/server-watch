@@ -2,6 +2,7 @@ package system
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 )
 
@@ -18,6 +19,14 @@ type Metrics struct {
 
 // GetMetrics возвращает копию актуальных метрик
 func (s *System) GetMetrics() Metrics {
+	if s.cache != nil {
+		if metrics, err := s.cache.GetMetrics(); err == nil {
+			return metrics
+		} else {
+			slog.Warn("не удалось получить метрики из кэша", "error", err)
+		}
+	}
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

@@ -29,10 +29,12 @@ type System struct {
 
 	AlertCPU AlertState
 	AlertMem AlertState
+
+	cache MetricsCache
 }
 
-func NewSystem(repository Repository, cfg config.Config, path string) *System {
-	return &System{repository: repository, config: cfg, configPath: path}
+func NewSystem(repository Repository, cfg config.Config, path string, cache MetricsCache) *System {
+	return &System{repository: repository, config: cfg, configPath: path, cache: cache}
 }
 
 // CollectMetrics с помощью вспомогательных функций собирает свежие данные с ОС
@@ -106,6 +108,13 @@ func (s *System) CollectMetrics() error {
 		s.lastError = errToReturn
 		s.mu.Unlock()
 		return errToReturn
+	}
+
+	if s.cache != nil {
+		err = s.cache.SetMetrics(metrics)
+		if err != nil {
+			slog.Warn("не удалось сохранить метрики в кэш", "error", err)
+		}
 	}
 
 	slog.Info("метрики успешно обновлены")

@@ -14,10 +14,7 @@ import (
 func newTestRedis(t *testing.T) *redis.Client {
 	t.Helper()
 
-	client, err := NewClient()
-	if err != nil {
-		t.Fatalf("не удалось подключиться к Redis: %v", err)
-	}
+	client := NewClient()
 
 	keys := []string{
 		"test:metrics:cpu",
@@ -44,12 +41,9 @@ func newTestRedis(t *testing.T) *redis.Client {
 }
 
 func TestNewClient(t *testing.T) {
-	redisClient, err := NewClient()
-	if err != nil {
-		t.Fatalf("не удалось подключиться к Redis: %v", err)
-	}
+	client := NewClient()
 
-	if redisClient == nil {
+	if client == nil {
 		t.Fatalf("получен пустой клиент Redis")
 	}
 }
@@ -204,8 +198,8 @@ func TestRedisMetricsCache_GetMetrics_CacheMiss(t *testing.T) {
 	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:metrics:")
 
 	_, err := metricsCache.GetMetrics()
-	if !errors.Is(err, ErrCacheMiss) {
-		t.Fatalf("ожидали ошибку %v, получили %v", ErrCacheMiss, err)
+	if !errors.Is(err, system.ErrCacheMiss) {
+		t.Fatalf("ожидали ошибку %v, получили %v", system.ErrCacheMiss, err)
 	}
 }
 
@@ -224,7 +218,7 @@ func TestRedisMetricsCache_GetMetrics_InvalidValue(t *testing.T) {
 		t.Fatal("ожидали ошибку, получили nil")
 	}
 
-	if errors.Is(err, ErrCacheMiss) {
+	if errors.Is(err, system.ErrCacheMiss) {
 		t.Fatalf("ожидали ошибку парсинга, получили ErrCacheMiss: %v", err)
 	}
 }
@@ -264,7 +258,7 @@ func TestRedisMetricsCache_GetMetrics_InvalidTimestamp(t *testing.T) {
 		t.Fatal("ожидали ошибку, получили nil")
 	}
 
-	if errors.Is(err, ErrCacheMiss) {
+	if errors.Is(err, system.ErrCacheMiss) {
 		t.Fatalf("ожидали ошибку парсинга, получили ErrCacheMiss: %v", err)
 	}
 }
@@ -304,7 +298,7 @@ func TestRedisMetricsCache_GetMetrics_ZeroMemTotal(t *testing.T) {
 		t.Fatal("ожидали ошибку, получили nil")
 	}
 
-	if errors.Is(err, ErrCacheMiss) {
+	if errors.Is(err, system.ErrCacheMiss) {
 		t.Fatalf("ожидали ошибку деления на ноль, получили ErrCacheMiss: %v", err)
 	}
 }
@@ -344,7 +338,7 @@ func TestRedisMetricsCache_GetMetrics_ZeroDiskTotal(t *testing.T) {
 		t.Fatal("ожидали ошибку, получили nil")
 	}
 
-	if errors.Is(err, ErrCacheMiss) {
+	if errors.Is(err, system.ErrCacheMiss) {
 		t.Fatalf("ожидали ошибку деления на ноль, получили ErrCacheMiss: %v", err)
 	}
 }

@@ -107,17 +107,33 @@ func (f *FakeRepository) GetActiveAlert(alertType AlertType) (*Alert, error) {
 	return nil, nil
 }
 
-func newTestSystem(fakeRepo *FakeRepository) *System {
-	return NewSystem(fakeRepo, config.Config{}, "")
+type FakeMetricsCache struct {
+	metrics Metrics
+	getErr  error
+	setErr  error
+}
+
+func (f *FakeMetricsCache) SetMetrics(metrics Metrics) error {
+	f.metrics = metrics
+	return f.setErr
+}
+
+func (f *FakeMetricsCache) GetMetrics() (Metrics, error) {
+	return f.metrics, f.getErr
+}
+
+func newTestSystem(fakeRepo *FakeRepository, fakeCache *FakeMetricsCache) *System {
+	return NewSystem(fakeRepo, config.Config{}, "", fakeCache)
 }
 
 func TestSystem_CollectMetrics(t *testing.T) {
 	fakeErr := fmt.Errorf("database unavailable")
 
 	tests := []struct {
-		name    string
-		repoErr error
-		wantErr error
+		name     string
+		repoErr  error
+		cacheErr error
+		wantErr  error
 	}{
 		{
 			name:    "успешное сохранение",
@@ -129,6 +145,11 @@ func TestSystem_CollectMetrics(t *testing.T) {
 			repoErr: fakeErr,
 			wantErr: fakeErr,
 		},
+		{
+			name:     "ошибка кэша",
+			cacheErr: ErrCacheMiss,
+			wantErr:  nil,
+		},
 	}
 
 	for _, tt := range tests {
@@ -138,7 +159,7 @@ func TestSystem_CollectMetrics(t *testing.T) {
 				saveMetricsErr: tt.repoErr,
 			}
 
-			system := newTestSystem(fakeRepo)
+			system := newTestSystem(fakeRepo, &FakeMetricsCache{setErr: tt.cacheErr})
 
 			err := system.CollectMetrics()
 			if !errors.Is(err, tt.wantErr) {
@@ -150,7 +171,7 @@ func TestSystem_CollectMetrics(t *testing.T) {
 
 func TestSystem_ProcessAlerts_CreateAlert(t *testing.T) {
 	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]Alert, 0)}
-	system := newTestSystem(fakeRepo)
+	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
 
 	system.AlertCPU.consecutiveHigh = AlertTriggerCount
 	metrics := Metrics{
@@ -198,7 +219,7 @@ func TestSystem_ProcessAlerts_CreateAlertWithActive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("не удалось сохранить алерт: %v", err)
 	}
-	system := newTestSystem(fakeRepo)
+	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
 
 	system.AlertCPU.consecutiveHigh = AlertTriggerCount
 	metrics := Metrics{
@@ -223,7 +244,7 @@ func TestSystem_ProcessAlerts_CreateAlert_GetActiveAlertError(t *testing.T) {
 		alerts:            make([]Alert, 0),
 		getActiveAlertErr: fakeErr,
 	}
-	system := newTestSystem(fakeRepo)
+	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
 
 	system.AlertCPU.consecutiveHigh = AlertTriggerCount
 	metrics := Metrics{
@@ -244,7 +265,7 @@ func TestSystem_ProcessAlerts_CreateAlert_SaveAlertError(t *testing.T) {
 		alerts:       make([]Alert, 0),
 		saveAlertErr: fakeErr,
 	}
-	system := newTestSystem(fakeRepo)
+	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
 
 	system.AlertCPU.consecutiveHigh = AlertTriggerCount
 	metrics := Metrics{
@@ -269,7 +290,7 @@ func TestSystem_ProcessAlerts_ResolveAlert(t *testing.T) {
 
 	fakeRepo.alerts = append(fakeRepo.alerts, alert)
 
-	system := newTestSystem(fakeRepo)
+	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
 	system.AlertCPU.consecutiveNormal = AlertResolveCount
 
 	err := system.processAlerts(Metrics{})
@@ -294,7 +315,7 @@ func TestSystem_ProcessAlerts_ResolveAlert_GetActiveAlertError(t *testing.T) {
 		getActiveAlertErr: fakeErr,
 	}
 
-	system := newTestSystem(fakeRepo)
+	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
 	system.AlertCPU.consecutiveNormal = AlertResolveCount
 
 	err := system.processAlerts(Metrics{})
@@ -321,7 +342,7 @@ func TestSystem_ProcessAlerts_ResolveAlert_ResolveError(t *testing.T) {
 
 	fakeRepo.alerts = append(fakeRepo.alerts, alert)
 
-	system := newTestSystem(fakeRepo)
+	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
 	system.AlertCPU.consecutiveNormal = AlertResolveCount
 
 	err := system.processAlerts(Metrics{})
@@ -333,7 +354,7 @@ func TestSystem_ProcessAlerts_ResolveAlert_ResolveError(t *testing.T) {
 func TestSystem_ProcessAlerts_ResolveAlert_NoActiveAlert(t *testing.T) {
 	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]Alert, 0)}
 
-	system := newTestSystem(fakeRepo)
+	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
 	system.AlertCPU.consecutiveNormal = AlertResolveCount
 
 	err := system.processAlerts(Metrics{})
@@ -454,7 +475,7 @@ func TestSystem_GetHistory(t *testing.T) {
 		}
 	}
 
-	system := newTestSystem(&fakeRepo)
+	system := newTestSystem(&fakeRepo, &FakeMetricsCache{})
 	metrics, err := system.GetHistory(now.Add(-time.Minute), now.Add(time.Minute))
 	if err != nil {
 		t.Fatalf("не удалось получить историю измерений метрик: %v", err)
@@ -475,7 +496,7 @@ func TestSystem_GetHistory_GetMetricsError(t *testing.T) {
 
 	now := time.Now().UTC()
 
-	system := newTestSystem(&fakeRepo)
+	system := newTestSystem(&fakeRepo, &FakeMetricsCache{})
 	_, err := system.GetHistory(now.Add(-time.Minute), now.Add(time.Minute))
 	if !errors.Is(err, fakeErr) {
 		t.Fatalf("ожидали ошибку %v, получили %v", fakeErr, err)
@@ -500,7 +521,7 @@ func TestSystem_GetHistory_IncludeBoundaries(t *testing.T) {
 		}
 	}
 
-	system := newTestSystem(&fakeRepo)
+	system := newTestSystem(&fakeRepo, &FakeMetricsCache{})
 	metrics, err := system.GetHistory(now.Add(-time.Minute), now.Add(time.Minute))
 	if err != nil {
 		t.Fatalf("не удалось получить историю измерений метрик: %v", err)
@@ -551,7 +572,7 @@ func TestSystem_GetAlerts(t *testing.T) {
 				}
 			}
 
-			system := newTestSystem(&fakeRepo)
+			system := newTestSystem(&fakeRepo, &FakeMetricsCache{})
 
 			alerts, err := system.GetAlerts(tt.activeOnly)
 			if err != nil {
@@ -573,7 +594,7 @@ func TestSystem_GetAlerts_Error(t *testing.T) {
 		getAlertsErr: fakeErr,
 	}
 
-	system := newTestSystem(&fakeRepo)
+	system := newTestSystem(&fakeRepo, &FakeMetricsCache{})
 
 	_, err := system.GetAlerts(true)
 	if !errors.Is(err, fakeErr) {
@@ -586,7 +607,7 @@ func TestSystem_UpdateConfig(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
 
 	initialCfg := config.DefaultConfig()
-	sys := NewSystem(&fakeRepo, initialCfg, configPath)
+	sys := NewSystem(&fakeRepo, initialCfg, configPath, &FakeMetricsCache{})
 
 	cpuCorrect := 45.0
 
@@ -627,7 +648,7 @@ func TestSystem_UpdateConfig_InvalidConfig(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
 
 	initialCfg := config.DefaultConfig()
-	sys := NewSystem(&fakeRepo, initialCfg, configPath)
+	sys := NewSystem(&fakeRepo, initialCfg, configPath, &FakeMetricsCache{})
 
 	cpuInvalid := 135.0
 
@@ -660,7 +681,7 @@ func TestSystem_UpdateConfig_SaveError(t *testing.T) {
 	configPath := t.TempDir()
 
 	initialCfg := config.DefaultConfig()
-	sys := NewSystem(&fakeRepo, initialCfg, configPath)
+	sys := NewSystem(&fakeRepo, initialCfg, configPath, &FakeMetricsCache{})
 
 	cpuNew := 70.0
 
@@ -684,5 +705,30 @@ func TestSystem_UpdateConfig_SaveError(t *testing.T) {
 
 	if want != sys.config {
 		t.Fatalf("ожидали %+v, получили %+v", want, sys.config)
+	}
+}
+
+func TestSystem_GetMetrics_FromCache(t *testing.T) {
+	fakeCache := &FakeMetricsCache{metrics: Metrics{CPUUsage: 50.0}}
+
+	fakeSys := newTestSystem(nil, fakeCache)
+
+	metrics := fakeSys.GetMetrics()
+
+	if metrics.CPUUsage != 50.0 {
+		t.Fatalf("ожидали CPUUsage из кэша = %v, получили %v", 50.0, metrics.CPUUsage)
+	}
+}
+
+func TestSystem_GetMetrics_CacheMiss(t *testing.T) {
+	fakeCache := &FakeMetricsCache{getErr: ErrCacheMiss}
+
+	fakeSys := newTestSystem(nil, fakeCache)
+	fakeSys.metrics = Metrics{CPUUsage: 30}
+
+	metrics := fakeSys.GetMetrics()
+
+	if metrics.CPUUsage != 30.0 {
+		t.Fatalf("ожидали CPUUsage = %v, получили %v", 30.0, metrics.CPUUsage)
 	}
 }
