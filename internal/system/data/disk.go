@@ -1,13 +1,14 @@
-package system
+package data
 
 import (
 	"fmt"
+
 	"golang.org/x/sys/unix"
 )
 
-// getDiskStats получает данные об объеме всего диска, об объеме свободной памяти на диске
+// GetDiskStats получает данные об объеме всего диска, об объеме свободной памяти на диске
 // и вычисляет процент использованной памяти на диске.
-func getDiskStats() (float64, float64, float64, error) {
+func GetDiskStats() (float64, float64, float64, error) {
 	var stats unix.Statfs_t
 	err := unix.Statfs("/", &stats)
 	if err != nil {

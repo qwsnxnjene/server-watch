@@ -23,6 +23,10 @@ func newTestRedis(t *testing.T) *redis.Client {
 		"test:metrics:disk_used",
 		"test:metrics:disk_total",
 		"test:metrics:timestamp",
+		"test:alert:cpu:count",
+		"test:alert:cpu:active",
+		"test:alert:mem:count",
+		"test:alert:mem:active",
 	}
 
 	cleanup := func() {
@@ -377,7 +381,7 @@ func TestRedisAlertStateStore_ResetCount(t *testing.T) {
 	client := newTestRedis(t)
 
 	stateStore := NewRedisAlertStateStore(client, time.Minute, "test:alert:")
-	res, err := stateStore.IncrementCount(system.AlertTypeHighCPU)
+	res, err := stateStore.IncrementCount(system.AlertTypeHighMem)
 	if err != nil {
 		t.Fatalf("ошибка инкрементирования счетчика алерта: %v", err)
 	}
@@ -385,14 +389,14 @@ func TestRedisAlertStateStore_ResetCount(t *testing.T) {
 		t.Fatalf("ожидали значение счетчика = 1, получили %v", res)
 	}
 
-	err = stateStore.ResetCount(system.AlertTypeHighCPU)
+	err = stateStore.ResetCount(system.AlertTypeHighMem)
 	if err != nil {
 		t.Fatalf("не удалось сбросить счетчик алерта: %v", err)
 	}
 
 	value, err := client.Get(
 		context.Background(),
-		"test:alert:cpu:count",
+		"test:alert:mem:count",
 	).Int64()
 
 	if err != nil {
@@ -405,7 +409,7 @@ func TestRedisAlertStateStore_ResetCount(t *testing.T) {
 
 	ttl, err := client.TTL(
 		context.Background(),
-		"test:alert:cpu:count",
+		"test:alert:mem:count",
 	).Result()
 
 	if err != nil {

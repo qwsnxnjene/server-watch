@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"server-watch/internal/config"
+	"server-watch/internal/system/data"
 	"sync"
 	"time"
 )
@@ -39,7 +40,7 @@ func NewSystem(repository Repository, cfg config.Config, path string, cache Metr
 
 // CollectMetrics с помощью вспомогательных функций собирает свежие данные с ОС
 func (s *System) CollectMetrics() error {
-	usage, err := getCPUUsage()
+	usage, err := data.GetCPUUsage()
 	if err != nil {
 		errToReturn := fmt.Errorf("не удалось получить данные о загрузке CPU: %w", err)
 		s.mu.Lock()
@@ -49,7 +50,7 @@ func (s *System) CollectMetrics() error {
 		return errToReturn
 	}
 
-	totalMem, usedMem, memUsage, err := readMemoryStats()
+	totalMem, usedMem, memUsage, err := data.ReadMemoryStats()
 	if err != nil {
 		errToReturn := fmt.Errorf("не удалось получить данные о памяти: %w", err)
 		s.mu.Lock()
@@ -59,7 +60,7 @@ func (s *System) CollectMetrics() error {
 		return errToReturn
 	}
 
-	totalDisk, usedDisk, diskUsage, err := getDiskStats()
+	totalDisk, usedDisk, diskUsage, err := data.GetDiskStats()
 	if err != nil {
 		errToReturn := fmt.Errorf("не удалось получить данные о диске: %w", err)
 		s.mu.Lock()

@@ -1,4 +1,4 @@
-package system
+package data
 
 import (
 	"fmt"
@@ -7,9 +7,9 @@ import (
 	"strings"
 )
 
-// readMemoryStats парсит /proc/meminfo и получает объем всей памяти, объем доступной памяти
+// ReadMemoryStats парсит /proc/meminfo и получает объем всей памяти, объем доступной памяти
 // и вычисляет процент использования памяти.
-func readMemoryStats() (float64, float64, float64, error) {
+func ReadMemoryStats() (float64, float64, float64, error) {
 	info, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("ошибка чтения /proc/meminfo: %w", err)
