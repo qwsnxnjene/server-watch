@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// AlertType - тип алерта (CPU или MEM)
 type AlertType string
 
 const (

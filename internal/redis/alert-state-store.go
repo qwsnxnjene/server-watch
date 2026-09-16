@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"server-watch/internal/system"
@@ -10,6 +11,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+//go:embed set_state.lua
+var setStateScript string
+
+// RedisAlertStateStore - хранилище состояний алертов в Redis
 type RedisAlertStateStore struct {
 	client *redis.Client
 	ttl    time.Duration
@@ -35,6 +40,7 @@ func (r *RedisAlertStateStore) alertKey(alertType system.AlertType, suffix strin
 	}
 }
 
+// IncrementCount увеличивает/сбрасывает счетчик алерта в зависимости от состояния
 func (r *RedisAlertStateStore) IncrementCount(alertType system.AlertType, condition system.AlertCondition) (int64, error) {
 	keyCond, err := r.alertKey(alertType, "condition")
 	if err != nil {
@@ -82,6 +88,7 @@ func (r *RedisAlertStateStore) IncrementCount(alertType system.AlertType, condit
 	}
 }
 
+// IsActive проверяет активен ли алерт заданного типа
 func (r *RedisAlertStateStore) IsActive(alertType system.AlertType) (bool, error) {
 	key, err := r.alertKey(alertType, "active")
 	if err != nil {
@@ -103,6 +110,7 @@ func (r *RedisAlertStateStore) IsActive(alertType system.AlertType) (bool, error
 	return false, nil
 }
 
+// SetActive устанавливает статус алерта заданного типа
 func (r *RedisAlertStateStore) SetActive(alertType system.AlertType, active bool) error {
 	key, err := r.alertKey(alertType, "active")
 	if err != nil {
@@ -122,6 +130,7 @@ func (r *RedisAlertStateStore) SetActive(alertType system.AlertType, active bool
 	return nil
 }
 
+// SetState устанавливает значение алерта
 func (r *RedisAlertStateStore) SetState(alertType system.AlertType, state system.AlertState) error {
 	keyCond, err := r.alertKey(alertType, "condition")
 	if err != nil {
@@ -138,24 +147,22 @@ func (r *RedisAlertStateStore) SetState(alertType system.AlertType, state system
 		return err
 	}
 
-	err = r.client.Set(context.Background(), keyCond, string(state.Condition), r.ttl).Err()
-	if err != nil {
-		return fmt.Errorf("не удалось установить состояние алерта: %w", err)
-	}
-
-	err = r.client.Set(context.Background(), keyCount, state.Count, r.ttl).Err()
-	if err != nil {
-		return fmt.Errorf("не удалось установить счетчик алерта: %w", err)
-	}
-
 	var value int
 	if state.Active {
 		value = 1
 	}
 
-	err = r.client.Set(context.Background(), keyActive, value, 0).Err()
+	err = r.client.Eval(
+		context.Background(),
+		setStateScript,
+		[]string{keyCond, keyCount, keyActive},
+		string(state.Condition),
+		state.Count,
+		value,
+		int64(r.ttl.Seconds()),
+	).Err()
 	if err != nil {
-		return fmt.Errorf("не удалось установить статус алерта: %w", err)
+		return fmt.Errorf("не удалось установить состояние алерта: %w", err)
 	}
 
 	return nil

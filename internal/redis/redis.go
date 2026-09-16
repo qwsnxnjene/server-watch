@@ -6,9 +6,12 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/redis/go-redis/v9/logging"
 )
 
 func NewClient() *redis.Client {
+	logging.Disable()
+
 	return redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379",
 		Password: "",
@@ -16,6 +19,7 @@ func NewClient() *redis.Client {
 	})
 }
 
+// StartRedisHealthCheck интервально проверяет подключение к Redis
 func StartRedisHealthCheck(ctx context.Context, client *redis.Client, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
