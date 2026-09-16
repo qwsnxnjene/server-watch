@@ -28,14 +28,24 @@ type System struct {
 	config     config.Config
 	configPath string
 
-	AlertCPU AlertState
-	AlertMem AlertState
+	alertState AlertStateStore
 
 	cache MetricsCache
 }
 
-func NewSystem(repository Repository, cfg config.Config, path string, cache MetricsCache) *System {
-	return &System{repository: repository, config: cfg, configPath: path, cache: cache}
+func NewSystem(
+	repository Repository,
+	alertState AlertStateStore,
+	cfg config.Config,
+	path string,
+	cache MetricsCache) *System {
+	return &System{
+		repository: repository,
+		alertState: alertState,
+		config:     cfg,
+		configPath: path,
+		cache:      cache,
+	}
 }
 
 // CollectMetrics с помощью вспомогательных функций собирает свежие данные с ОС
@@ -100,9 +110,16 @@ func (s *System) CollectMetrics() error {
 
 	updatePrometheusMetrics(metrics)
 
-	s.updateAlerts(metrics)
+	update, err := s.updateAlerts(metrics)
+	if err != nil {
+		errToReturn := fmt.Errorf("не удалось обновить состояния алертов: %w", err)
+		s.mu.Lock()
+		s.lastError = errToReturn
+		s.mu.Unlock()
+		return errToReturn
+	}
 
-	err = s.processAlerts(metrics)
+	err = s.processAlerts(metrics, update)
 	if err != nil {
 		errToReturn := fmt.Errorf("не удалось обработать алерты: %w", err)
 		s.mu.Lock()

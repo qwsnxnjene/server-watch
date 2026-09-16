@@ -33,33 +33,14 @@ func (s *System) GetAlerts(activeOnly bool) ([]Alert, error) {
 	return alerts, nil
 }
 
-type AlertState struct {
-	consecutiveHigh   int
-	consecutiveNormal int
+type alertUpdate struct {
+	CPUCount     int64
+	CPUCondition AlertCondition
+	MemCount     int64
+	MemCondition AlertCondition
 }
 
-// Record обновляет счетчики алерта в зависимости от значения и порога
-func (a *AlertState) Record(value float64, threshold float64) {
-	if value > threshold {
-		a.consecutiveHigh++
-		a.consecutiveNormal = 0
-	} else {
-		a.consecutiveNormal++
-		a.consecutiveHigh = 0
-	}
-}
-
-// HighThresholdReached сообщает о том, превышено ли количество подряд идущих измерений выше нормы
-func (a *AlertState) HighThresholdReached() bool {
-	return a.consecutiveHigh >= AlertTriggerCount
-}
-
-// ResolveThresholdReached сообщает о том, превышено ли количество подряд идущих измерений в рамках нормы
-func (a *AlertState) ResolveThresholdReached() bool {
-	return a.consecutiveNormal >= AlertResolveCount
-}
-
-func (s *System) updateAlerts(metrics Metrics) {
+func (s *System) updateAlerts(metrics Metrics) (alertUpdate, error) {
 	if metrics.CPUUsage > HighCPUThreshold {
 		slog.Warn(
 			"превышен порог CPU",
@@ -77,21 +58,56 @@ func (s *System) updateAlerts(metrics Metrics) {
 	}
 
 	// обновляем данные об алертах для процессора и памяти
-	s.AlertCPU.Record(metrics.CPUUsage, HighCPUThreshold)
-	s.AlertMem.Record(metrics.MemUsage, HighMemThreshold)
+	var update alertUpdate
+
+	var condition AlertCondition
+
+	if metrics.CPUUsage > HighCPUThreshold {
+		condition = ConditionHigh
+	} else {
+		condition = ConditionNormal
+	}
+
+	count, err := s.alertState.IncrementCount(
+		AlertTypeHighCPU,
+		condition,
+	)
+	if err != nil {
+		return alertUpdate{}, fmt.Errorf("не удалось обновить состояние CPU-алерта: %w", err)
+	}
+	update.CPUCount = count
+	update.CPUCondition = condition
+
+	if metrics.MemUsage > HighMemThreshold {
+		condition = ConditionHigh
+	} else {
+		condition = ConditionNormal
+	}
+
+	count, err = s.alertState.IncrementCount(
+		AlertTypeHighMem,
+		condition,
+	)
+	if err != nil {
+		return alertUpdate{}, fmt.Errorf("не удалось обновить состояние Mem-алерта: %w", err)
+	}
+	update.MemCount = count
+	update.MemCondition = condition
+
+	return update, nil
 }
 
-func (s *System) processAlerts(metrics Metrics) error {
+func (s *System) processAlerts(metrics Metrics, update alertUpdate) error {
 	// проверяем четыре сценария, по 2 на процессор и память (создание и резолв алерта)
 
-	if s.AlertCPU.HighThresholdReached() {
+	if update.CPUCondition == ConditionHigh && update.CPUCount >= AlertTriggerCount {
 		err := s.createAlertIfNeeded(AlertTypeHighCPU, metrics.CPUUsage, HighCPUThreshold)
 		if err != nil {
 			return fmt.Errorf("не удалось обработать алерт: %w", err)
 		}
 	}
 
-	if s.AlertCPU.ResolveThresholdReached() {
+	if update.CPUCondition == ConditionNormal && update.CPUCount >= AlertResolveCount {
 		err := s.resolveAlertIfNeeded(AlertTypeHighCPU)
 		if err != nil {
 			return fmt.Errorf("не удалось обработать алерт: %w", err)
@@ -99,14 +115,14 @@ func (s *System) processAlerts(metrics Metrics) error {
 	}
 
 	//с памятью точно также
-	if s.AlertMem.HighThresholdReached() {
+	if update.MemCondition == ConditionHigh && update.MemCount >= AlertTriggerCount {
 		err := s.createAlertIfNeeded(AlertTypeHighMem, metrics.MemUsage, HighMemThreshold)
 		if err != nil {
 			return fmt.Errorf("не удалось обработать алерт: %w", err)
 		}
 	}
 
-	if s.AlertMem.ResolveThresholdReached() {
+	if update.MemCondition == ConditionNormal && update.MemCount >= AlertResolveCount {
 		err := s.resolveAlertIfNeeded(AlertTypeHighMem)
 		if err != nil {
 			return fmt.Errorf("не удалось обработать алерт: %w", err)

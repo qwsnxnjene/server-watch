@@ -352,7 +352,7 @@ func TestRedisAlertStateStore_IncrementCount(t *testing.T) {
 
 	stateStore := NewRedisAlertStateStore(client, time.Minute, "test:alert:")
 
-	res, err := stateStore.IncrementCount(system.AlertTypeHighCPU)
+	res, err := stateStore.IncrementCount(system.AlertTypeHighCPU, system.ConditionHigh)
 	if err != nil {
 		t.Fatalf("ошибка инкрементирования счетчика алерта: %v", err)
 	}
@@ -360,12 +360,51 @@ func TestRedisAlertStateStore_IncrementCount(t *testing.T) {
 		t.Fatalf("ожидали значение счетчика = 1, получили %v", res)
 	}
 
-	res, err = stateStore.IncrementCount(system.AlertTypeHighCPU)
+	res, err = stateStore.IncrementCount(system.AlertTypeHighCPU, system.ConditionHigh)
 	if err != nil {
 		t.Fatalf("ошибка инкрементирования счетчика алерта: %v", err)
 	}
 	if res != 2 {
 		t.Fatalf("ожидали значение счетчика = 2, получили %v", res)
+	}
+
+	res, err = stateStore.IncrementCount(system.AlertTypeHighCPU, system.ConditionNormal)
+	if err != nil {
+		t.Fatalf("ошибка инкрементирования счетчика алерта: %v", err)
+	}
+	if res != 1 {
+		t.Fatalf("ожидали значение счетчика = 1, получили %v", res)
+	}
+
+	res, err = stateStore.IncrementCount(system.AlertTypeHighCPU, system.ConditionNormal)
+	if err != nil {
+		t.Fatalf("ошибка инкрементирования счетчика алерта: %v", err)
+	}
+	if res != 2 {
+		t.Fatalf("ожидали значение счетчика = 2, получили %v", res)
+	}
+
+	res, err = stateStore.IncrementCount(system.AlertTypeHighCPU, system.ConditionHigh)
+	if err != nil {
+		t.Fatalf("ошибка инкрементирования счетчика алерта: %v", err)
+	}
+	if res != 1 {
+		t.Fatalf("ожидали значение счетчика = 1, получили %v", res)
+	}
+
+	condition, err := client.Get(
+		context.Background(),
+		"test:alert:cpu:condition",
+	).Result()
+	if err != nil {
+		t.Fatalf("не удалось получить состояние алерта: %v", err)
+	}
+
+	if condition != string(system.ConditionHigh) {
+		t.Fatalf("ожидали состояние = %q, получили %q",
+			system.ConditionHigh,
+			condition,
+		)
 	}
 
 	ttl, err := client.TTL(context.Background(), "test:alert:cpu:count").Result()
@@ -375,49 +414,13 @@ func TestRedisAlertStateStore_IncrementCount(t *testing.T) {
 	if ttl <= 0 || ttl > time.Minute {
 		t.Fatalf("ожидали TTL в промежутке от 0 до 1 минуты, получили %v", ttl)
 	}
-}
 
-func TestRedisAlertStateStore_ResetCount(t *testing.T) {
-	client := newTestRedis(t)
-
-	stateStore := NewRedisAlertStateStore(client, time.Minute, "test:alert:")
-	res, err := stateStore.IncrementCount(system.AlertTypeHighMem)
+	ttl, err = client.TTL(context.Background(), "test:alert:cpu:condition").Result()
 	if err != nil {
-		t.Fatalf("ошибка инкрементирования счетчика алерта: %v", err)
+		t.Fatalf("не удалось получить информацию о TTL: %v", err)
 	}
-	if res != 1 {
-		t.Fatalf("ожидали значение счетчика = 1, получили %v", res)
-	}
-
-	err = stateStore.ResetCount(system.AlertTypeHighMem)
-	if err != nil {
-		t.Fatalf("не удалось сбросить счетчик алерта: %v", err)
-	}
-
-	value, err := client.Get(
-		context.Background(),
-		"test:alert:mem:count",
-	).Int64()
-
-	if err != nil {
-		t.Fatalf("не удалось получить счетчик после сброса: %v", err)
-	}
-
-	if value != 0 {
-		t.Fatalf("ожидали значение счетчика = 0, получили %v", value)
-	}
-
-	ttl, err := client.TTL(
-		context.Background(),
-		"test:alert:mem:count",
-	).Result()
-
-	if err != nil {
-		t.Fatalf("не удалось получить TTL: %v", err)
-	}
-
-	if ttl != -1 {
-		t.Fatalf("ожидали отсутствие TTL (-1), получили %v", ttl)
+	if ttl <= 0 || ttl > time.Minute {
+		t.Fatalf("ожидали TTL в промежутке от 0 до 1 минуты, получили %v", ttl)
 	}
 }
 
@@ -484,7 +487,7 @@ func TestRedisAlertStateStore_InvalidAlertType(t *testing.T) {
 	client := newTestRedis(t)
 	stateStore := NewRedisAlertStateStore(client, time.Minute, "test:alert:")
 
-	_, err := stateStore.IncrementCount(system.AlertType("UNKNOWN"))
+	_, err := stateStore.IncrementCount(system.AlertType("UNKNOWN"), system.ConditionHigh)
 	if err == nil {
 		t.Fatal("ожидали ошибку для неверного типа алерта")
 	}

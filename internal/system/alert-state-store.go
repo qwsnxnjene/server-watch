@@ -5,19 +5,20 @@ import (
 	"sync"
 )
 
-type alertState struct {
-	count  int64
-	active bool
+type AlertState struct {
+	Count     int64
+	Condition AlertCondition
+	Active    bool
 }
 
 type InMemoryAlertStateStore struct {
 	mu     sync.RWMutex
-	states map[AlertType]alertState
+	states map[AlertType]AlertState
 }
 
 func NewInMemoryAlertStateStore() *InMemoryAlertStateStore {
 	return &InMemoryAlertStateStore{
-		states: make(map[AlertType]alertState),
+		states: make(map[AlertType]AlertState),
 	}
 }
 
@@ -25,42 +26,34 @@ func validAlertType(alertType AlertType) bool {
 	return alertType == AlertTypeHighMem || alertType == AlertTypeHighCPU
 }
 
-func (i *InMemoryAlertStateStore) IncrementCount(alertType AlertType) (int64, error) {
-	var value int64
-
+func (i *InMemoryAlertStateStore) IncrementCount(alertType AlertType, condition AlertCondition) (int64, error) {
 	if !validAlertType(alertType) {
 		return 0, errors.New("некорректный тип алерта")
 	}
 
+	var value int64
+
 	i.mu.Lock()
 	if state, ok := i.states[alertType]; !ok {
-		i.states[alertType] = alertState{count: 1}
+		i.states[alertType] = AlertState{Count: 1, Condition: condition}
 		value = 1
 	} else {
-		state.count++
-		value = state.count
-		i.states[alertType] = state
+		if state.Condition != condition {
+			// состояния различны - ставим новое состояние и сбрасываем счетчик
+			state.Condition = condition
+			state.Count = 1
+			value = 1
+			i.states[alertType] = state
+		} else {
+			// состояния одинаковые - просто обновляем счетчик
+			state.Count++
+			value = state.Count
+			i.states[alertType] = state
+		}
 	}
 	i.mu.Unlock()
 
 	return value, nil
-}
-
-func (i *InMemoryAlertStateStore) ResetCount(alertType AlertType) error {
-	if !validAlertType(alertType) {
-		return errors.New("некорректный тип алерта")
-	}
-
-	i.mu.Lock()
-	if state, ok := i.states[alertType]; !ok {
-		i.states[alertType] = alertState{count: 0}
-	} else {
-		state.count = 0
-		i.states[alertType] = state
-	}
-	i.mu.Unlock()
-
-	return nil
 }
 
 func (i *InMemoryAlertStateStore) IsActive(alertType AlertType) (bool, error) {
@@ -74,7 +67,7 @@ func (i *InMemoryAlertStateStore) IsActive(alertType AlertType) (bool, error) {
 	if state, ok := i.states[alertType]; !ok {
 		return false, nil
 	} else {
-		return state.active, nil
+		return state.Active, nil
 	}
 }
 
@@ -87,13 +80,32 @@ func (i *InMemoryAlertStateStore) SetActive(alertType AlertType, active bool) er
 	defer i.mu.Unlock()
 
 	if state, ok := i.states[alertType]; !ok {
-		i.states[alertType] = alertState{
-			active: active,
+		i.states[alertType] = AlertState{
+			Active: active,
 		}
 	} else {
-		state.active = active
+		state.Active = active
 		i.states[alertType] = state
 	}
 
+	return nil
+}
+
+func (i *InMemoryAlertStateStore) GetState(alertType AlertType) (AlertState, error) {
+	if !validAlertType(alertType) {
+		return AlertState{}, errors.New("некорректный тип алерта")
+	}
+
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+
+	if state, ok := i.states[alertType]; ok {
+		return state, nil
+	}
+
+	return AlertState{}, nil
+}
+
+func (i *InMemoryAlertStateStore) SetState(alertType AlertType, state AlertState) error {
 	return nil
 }

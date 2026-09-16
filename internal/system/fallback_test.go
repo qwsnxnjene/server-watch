@@ -22,14 +22,9 @@ type mockAlertStateStore struct {
 	active         bool
 }
 
-func (m *mockAlertStateStore) IncrementCount(alertType AlertType) (int64, error) {
+func (m *mockAlertStateStore) IncrementCount(alertType AlertType, condition AlertCondition) (int64, error) {
 	m.incrementCalls++
 	return m.incrementValue, m.incrementErr
-}
-
-func (m *mockAlertStateStore) ResetCount(alertType AlertType) error {
-	m.resetCalls++
-	return m.resetErr
 }
 
 func (m *mockAlertStateStore) IsActive(alertType AlertType) (bool, error) {
@@ -41,6 +36,14 @@ func (m *mockAlertStateStore) SetActive(alertType AlertType, active bool) error 
 	m.active = active
 	m.setActiveCalls++
 	return m.setActiveErr
+}
+
+func (m *mockAlertStateStore) GetState(alertType AlertType) (AlertState, error) {
+	return AlertState{}, nil
+}
+
+func (m *mockAlertStateStore) SetState(alertType AlertType, state AlertState) error {
+	return nil
 }
 
 func TestFallbackAlertStateStore_IncrementCount(t *testing.T) {
@@ -118,7 +121,7 @@ func TestFallbackAlertStateStore_IncrementCount(t *testing.T) {
 
 			store := NewFallbackAlertStateStore(memMock, redisMock)
 
-			got, err := store.IncrementCount(AlertTypeHighCPU)
+			got, err := store.IncrementCount(AlertTypeHighCPU, ConditionHigh)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("ожидали ошибку (или её отсутствие), получили %v", err)
 			}
@@ -135,79 +138,6 @@ func TestFallbackAlertStateStore_IncrementCount(t *testing.T) {
 			if tt.memCalls != memMock.incrementCalls {
 				t.Fatalf("ожидали %v вызовов in-memory, получили %v",
 					tt.memCalls, memMock.incrementCalls)
-			}
-		})
-	}
-}
-
-func TestFallbackAlertStateStore_ResetCount(t *testing.T) {
-	tests := []struct {
-		name string
-
-		redisErr   error
-		redisCalls int
-
-		memErr   error
-		memCalls int
-
-		wantErr bool
-	}{
-		{
-			name:       "redis доступен, память доступна",
-			redisErr:   nil,
-			redisCalls: 1,
-			memErr:     nil,
-			memCalls:   0,
-		},
-		{
-			name:       "redis недоступен, память доступна",
-			redisErr:   ErrCacheMiss,
-			redisCalls: 1,
-			memErr:     nil,
-			memCalls:   1,
-		},
-		{
-			name:       "redis доступен, память недоступна",
-			redisErr:   nil,
-			redisCalls: 1,
-			memErr:     errors.New("ошибка памяти"),
-			memCalls:   0,
-		},
-		{
-			name:       "redis недоступен, память недоступна",
-			redisErr:   ErrCacheMiss,
-			redisCalls: 1,
-			memErr:     errors.New("ошибка памяти"),
-			memCalls:   1,
-			wantErr:    true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			redisMock := &mockAlertStateStore{
-				resetErr: tt.redisErr,
-			}
-
-			memMock := &mockAlertStateStore{
-				resetErr: tt.memErr,
-			}
-
-			store := NewFallbackAlertStateStore(memMock, redisMock)
-
-			err := store.ResetCount(AlertTypeHighCPU)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("ожидали ошибку (или её отсутствие), получили %v", err)
-			}
-
-			if tt.redisCalls != redisMock.resetCalls {
-				t.Fatalf("ожидали вызовов Redis = %v, получили %v",
-					tt.redisCalls, redisMock.resetCalls)
-			}
-
-			if tt.memCalls != memMock.resetCalls {
-				t.Fatalf("ожидали вызовов in-memory = %v, получили %v",
-					tt.memCalls, memMock.resetCalls)
 			}
 		})
 	}
@@ -324,7 +254,7 @@ func TestFallbackAlertStateStore_SetActive(t *testing.T) {
 		wantErr         bool
 	}{
 		{
-			name:            "redis доступен, active true",
+			name:            "redis доступен, Active true",
 			active:          true,
 			redisErr:        nil,
 			redisCalls:      1,
@@ -334,7 +264,7 @@ func TestFallbackAlertStateStore_SetActive(t *testing.T) {
 			wantErr:         false,
 		},
 		{
-			name:            "redis доступен, active false",
+			name:            "redis доступен, Active false",
 			active:          false,
 			redisErr:        nil,
 			redisCalls:      1,
@@ -355,7 +285,7 @@ func TestFallbackAlertStateStore_SetActive(t *testing.T) {
 			wantErr:         false,
 		},
 		{
-			name:            "redis недоступен, память доступна, active false",
+			name:            "redis недоступен, память доступна, Active false",
 			active:          false,
 			redisErr:        ErrCacheMiss,
 			redisCalls:      1,
@@ -418,7 +348,7 @@ func TestFallbackAlertStateStore_SetActive(t *testing.T) {
 
 			if redisMock.active != tt.wantRedisActive {
 				t.Fatalf(
-					"ожидали active в Redis = %v, получили %v",
+					"ожидали Active в Redis = %v, получили %v",
 					tt.wantRedisActive,
 					redisMock.active,
 				)
@@ -426,7 +356,7 @@ func TestFallbackAlertStateStore_SetActive(t *testing.T) {
 
 			if memMock.active != tt.wantMemActive {
 				t.Fatalf(
-					"ожидали active в in-memory = %v, получили %v",
+					"ожидали Active в in-memory = %v, получили %v",
 					tt.wantMemActive,
 					memMock.active,
 				)

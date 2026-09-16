@@ -7,7 +7,7 @@ import (
 func TestInMemoryAlertStateStore_IncrementCount(t *testing.T) {
 	store := NewInMemoryAlertStateStore()
 
-	val, err := store.IncrementCount(AlertTypeHighCPU)
+	val, err := store.IncrementCount(AlertTypeHighCPU, ConditionHigh)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -16,7 +16,7 @@ func TestInMemoryAlertStateStore_IncrementCount(t *testing.T) {
 		t.Fatalf("ожидали значение счетчика = 1, получили %v", val)
 	}
 
-	val, err = store.IncrementCount(AlertTypeHighCPU)
+	val, err = store.IncrementCount(AlertTypeHighCPU, ConditionHigh)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,12 +25,25 @@ func TestInMemoryAlertStateStore_IncrementCount(t *testing.T) {
 		t.Fatalf("ожидали значение счетчика = 2, получили %v", val)
 	}
 
-	err = store.ResetCount(AlertTypeHighCPU)
+	val, err = store.IncrementCount(AlertTypeHighCPU, ConditionNormal)
 	if err != nil {
-		t.Fatalf("не удалось сбросить значение счетчика: %v", err)
+		t.Fatal(err)
 	}
 
-	val, err = store.IncrementCount(AlertTypeHighCPU)
+	if val != 1 {
+		t.Fatalf("ожидали значение счетчика = 1, получили %v", val)
+	}
+
+	val, err = store.IncrementCount(AlertTypeHighCPU, ConditionNormal)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if val != 2 {
+		t.Fatalf("ожидали значение счетчика = 2, получили %v", val)
+	}
+
+	val, err = store.IncrementCount(AlertTypeHighCPU, ConditionHigh)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +56,7 @@ func TestInMemoryAlertStateStore_IncrementCount(t *testing.T) {
 func TestInMemoryAlertStateStore_IncrementCount_InvalidType(t *testing.T) {
 	store := NewInMemoryAlertStateStore()
 
-	_, err := store.IncrementCount(AlertType("UNKNOWN"))
+	_, err := store.IncrementCount(AlertType("UNKNOWN"), ConditionHigh)
 	if err == nil {
 		t.Fatal("ожидали ошибку типа алерта, получили nil")
 	}
@@ -82,7 +95,7 @@ func TestInMemoryAlertStateStore_SetActive(t *testing.T) {
 func TestInMemoryAlertStateStore_SetActive_ValueChanging(t *testing.T) {
 	store := NewInMemoryAlertStateStore()
 
-	val, err := store.IncrementCount(AlertTypeHighCPU)
+	val, err := store.IncrementCount(AlertTypeHighCPU, ConditionHigh)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +108,7 @@ func TestInMemoryAlertStateStore_SetActive_ValueChanging(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	val, err = store.IncrementCount(AlertTypeHighCPU)
+	val, err = store.IncrementCount(AlertTypeHighCPU, ConditionHigh)
 	if err != nil {
 		t.Fatal(err)
 	}

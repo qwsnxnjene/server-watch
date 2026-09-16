@@ -123,7 +123,12 @@ func (f *FakeMetricsCache) GetMetrics() (Metrics, error) {
 }
 
 func newTestSystem(fakeRepo *FakeRepository, fakeCache *FakeMetricsCache) *System {
-	return NewSystem(fakeRepo, config.Config{}, "", fakeCache)
+	return NewSystem(
+		fakeRepo,
+		NewFallbackAlertStateStore(&mockAlertStateStore{}, &mockAlertStateStore{}),
+		config.Config{},
+		"",
+		fakeCache)
 }
 
 func TestSystem_CollectMetrics(t *testing.T) {
@@ -173,12 +178,15 @@ func TestSystem_ProcessAlerts_CreateAlert(t *testing.T) {
 	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]Alert, 0)}
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
 
-	system.AlertCPU.consecutiveHigh = AlertTriggerCount
 	metrics := Metrics{
 		CPUUsage: 95.5,
 	}
+	update := alertUpdate{
+		CPUCount:     AlertTriggerCount,
+		CPUCondition: ConditionHigh,
+	}
 
-	err := system.processAlerts(metrics)
+	err := system.processAlerts(metrics, update)
 	if err != nil {
 		t.Fatalf("ошибка обработки алерта: %v", err)
 	}
@@ -212,7 +220,7 @@ func TestSystem_ProcessAlerts_CreateAlert(t *testing.T) {
 func TestSystem_ProcessAlerts_CreateAlertWithActive(t *testing.T) {
 	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]Alert, 0)}
 
-	// сохраняем алерт до теста, чтобы при добавлении нового алерта уже был активный в памяти
+	// сохраняем активный алерт до теста, чтобы новый алерт не создавался
 	_, err := fakeRepo.SaveAlert(Alert{
 		Type: AlertTypeHighCPU,
 	})
@@ -221,12 +229,15 @@ func TestSystem_ProcessAlerts_CreateAlertWithActive(t *testing.T) {
 	}
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
 
-	system.AlertCPU.consecutiveHigh = AlertTriggerCount
 	metrics := Metrics{
 		CPUUsage: 95.5,
 	}
+	update := alertUpdate{
+		CPUCount:     AlertTriggerCount,
+		CPUCondition: ConditionHigh,
+	}
 
-	err = system.processAlerts(metrics)
+	err = system.processAlerts(metrics, update)
 	if err != nil {
 		t.Fatalf("ошибка обработки алерта: %v", err)
 	}
@@ -246,12 +257,15 @@ func TestSystem_ProcessAlerts_CreateAlert_GetActiveAlertError(t *testing.T) {
 	}
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
 
-	system.AlertCPU.consecutiveHigh = AlertTriggerCount
 	metrics := Metrics{
 		CPUUsage: 95.5,
 	}
+	update := alertUpdate{
+		CPUCount:     AlertTriggerCount,
+		CPUCondition: ConditionHigh,
+	}
 
-	err := system.processAlerts(metrics)
+	err := system.processAlerts(metrics, update)
 	if !errors.Is(err, fakeErr) {
 		t.Fatalf("ожидали ошибку %v, получили %v", fakeErr, err)
 	}
@@ -267,12 +281,15 @@ func TestSystem_ProcessAlerts_CreateAlert_SaveAlertError(t *testing.T) {
 	}
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
 
-	system.AlertCPU.consecutiveHigh = AlertTriggerCount
 	metrics := Metrics{
 		CPUUsage: 95.5,
 	}
+	update := alertUpdate{
+		CPUCount:     AlertTriggerCount,
+		CPUCondition: ConditionHigh,
+	}
 
-	err := system.processAlerts(metrics)
+	err := system.processAlerts(metrics, update)
 	if !errors.Is(err, fakeErr) {
 		t.Fatalf("ожидали ошибку %v, получили %v", fakeErr, err)
 	}
@@ -291,9 +308,12 @@ func TestSystem_ProcessAlerts_ResolveAlert(t *testing.T) {
 	fakeRepo.alerts = append(fakeRepo.alerts, alert)
 
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
-	system.AlertCPU.consecutiveNormal = AlertResolveCount
+	update := alertUpdate{
+		CPUCount:     AlertResolveCount,
+		CPUCondition: ConditionNormal,
+	}
 
-	err := system.processAlerts(Metrics{})
+	err := system.processAlerts(Metrics{}, update)
 	if err != nil {
 		t.Fatalf("не удалось обработать алерт: %v", err)
 	}
@@ -316,9 +336,12 @@ func TestSystem_ProcessAlerts_ResolveAlert_GetActiveAlertError(t *testing.T) {
 	}
 
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
-	system.AlertCPU.consecutiveNormal = AlertResolveCount
+	update := alertUpdate{
+		CPUCount:     AlertResolveCount,
+		CPUCondition: ConditionNormal,
+	}
 
-	err := system.processAlerts(Metrics{})
+	err := system.processAlerts(Metrics{}, update)
 	if !errors.Is(err, fakeErr) {
 		t.Fatalf("ожидали ошибку %v, получили %v", fakeErr, err)
 	}
@@ -343,9 +366,12 @@ func TestSystem_ProcessAlerts_ResolveAlert_ResolveError(t *testing.T) {
 	fakeRepo.alerts = append(fakeRepo.alerts, alert)
 
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
-	system.AlertCPU.consecutiveNormal = AlertResolveCount
+	update := alertUpdate{
+		CPUCount:     AlertResolveCount,
+		CPUCondition: ConditionNormal,
+	}
 
-	err := system.processAlerts(Metrics{})
+	err := system.processAlerts(Metrics{}, update)
 	if !errors.Is(err, fakeErr) {
 		t.Fatalf("ожидали ошибку %v, получили %v", fakeErr, err)
 	}
@@ -355,108 +381,14 @@ func TestSystem_ProcessAlerts_ResolveAlert_NoActiveAlert(t *testing.T) {
 	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]Alert, 0)}
 
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
-	system.AlertCPU.consecutiveNormal = AlertResolveCount
+	update := alertUpdate{
+		CPUCount:     AlertResolveCount,
+		CPUCondition: ConditionNormal,
+	}
 
-	err := system.processAlerts(Metrics{})
+	err := system.processAlerts(Metrics{}, update)
 	if err != nil {
 		t.Fatalf("не удалось обработать алерт: %v", err)
-	}
-}
-
-func TestAlertState_Record(t *testing.T) {
-	tests := []struct {
-		name                        string
-		values                      []float64
-		threshold                   float64
-		wantConsecutiveHigh         int
-		wantConsecutiveNormal       int
-		wantHighThresholdReached    bool
-		wantResolveThresholdReached bool
-	}{
-		{
-			name:                        "три HIGH измерения подряд",
-			values:                      []float64{99.9, 99.9, 99.9},
-			threshold:                   HighCPUThreshold,
-			wantConsecutiveHigh:         3,
-			wantConsecutiveNormal:       0,
-			wantHighThresholdReached:    true,
-			wantResolveThresholdReached: false,
-		},
-		{
-			name:                        "три NORMAL измерения подряд",
-			values:                      []float64{19.9, 19.9, 19.9},
-			threshold:                   HighCPUThreshold,
-			wantConsecutiveHigh:         0,
-			wantConsecutiveNormal:       3,
-			wantHighThresholdReached:    false,
-			wantResolveThresholdReached: true,
-		},
-		{
-			name:                        "два HIGH и одно NORMAL измерение",
-			values:                      []float64{99.9, 99.9, 19.9},
-			threshold:                   HighCPUThreshold,
-			wantConsecutiveHigh:         0,
-			wantConsecutiveNormal:       1,
-			wantHighThresholdReached:    false,
-			wantResolveThresholdReached: false,
-		},
-		{
-			name:                        "два NORMAL и одно HIGH измерение",
-			values:                      []float64{19.9, 19.9, 99.9},
-			threshold:                   HighCPUThreshold,
-			wantConsecutiveHigh:         1,
-			wantConsecutiveNormal:       0,
-			wantHighThresholdReached:    false,
-			wantResolveThresholdReached: false,
-		},
-		{
-			name:                        "три HIGH и один NORMAL",
-			values:                      []float64{99.9, 99.9, 99.9, 19.9},
-			threshold:                   HighCPUThreshold,
-			wantConsecutiveHigh:         0,
-			wantConsecutiveNormal:       1,
-			wantHighThresholdReached:    false,
-			wantResolveThresholdReached: false,
-		},
-		{
-			name:                        "измерения равные порогу",
-			values:                      []float64{HighCPUThreshold, HighCPUThreshold, HighCPUThreshold},
-			threshold:                   HighCPUThreshold,
-			wantConsecutiveHigh:         0,
-			wantConsecutiveNormal:       3,
-			wantHighThresholdReached:    false,
-			wantResolveThresholdReached: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			alertState := AlertState{}
-
-			for _, value := range tt.values {
-				alertState.Record(value, tt.threshold)
-			}
-
-			if tt.wantConsecutiveHigh != alertState.consecutiveHigh {
-				t.Fatalf("ожидали %v подряд HIGH измерений, получили %v",
-					tt.wantConsecutiveHigh, alertState.consecutiveHigh)
-			}
-
-			if tt.wantConsecutiveNormal != alertState.consecutiveNormal {
-				t.Fatalf("ожидали %v подряд NORMAL измерений, получили %v",
-					tt.wantConsecutiveNormal, alertState.consecutiveNormal)
-			}
-
-			if tt.wantHighThresholdReached != alertState.HighThresholdReached() {
-				t.Fatalf("ожидали %v от HighThresholdReached, получили %v",
-					tt.wantHighThresholdReached, alertState.HighThresholdReached())
-			}
-
-			if tt.wantResolveThresholdReached != alertState.ResolveThresholdReached() {
-				t.Fatalf("ожидали %v от ResolveThresholdReached, получили %v",
-					tt.wantResolveThresholdReached, alertState.ResolveThresholdReached())
-			}
-		})
 	}
 }
 
@@ -607,7 +539,12 @@ func TestSystem_UpdateConfig(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
 
 	initialCfg := config.DefaultConfig()
-	sys := NewSystem(&fakeRepo, initialCfg, configPath, &FakeMetricsCache{})
+	sys := NewSystem(
+		&fakeRepo,
+		NewFallbackAlertStateStore(&mockAlertStateStore{}, &mockAlertStateStore{}),
+		initialCfg,
+		configPath,
+		&FakeMetricsCache{})
 
 	cpuCorrect := 45.0
 
@@ -648,7 +585,13 @@ func TestSystem_UpdateConfig_InvalidConfig(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
 
 	initialCfg := config.DefaultConfig()
-	sys := NewSystem(&fakeRepo, initialCfg, configPath, &FakeMetricsCache{})
+	sys := NewSystem(
+		&fakeRepo,
+		NewFallbackAlertStateStore(&mockAlertStateStore{}, &mockAlertStateStore{}),
+		initialCfg,
+		configPath,
+		&FakeMetricsCache{},
+	)
 
 	cpuInvalid := 135.0
 
@@ -681,7 +624,12 @@ func TestSystem_UpdateConfig_SaveError(t *testing.T) {
 	configPath := t.TempDir()
 
 	initialCfg := config.DefaultConfig()
-	sys := NewSystem(&fakeRepo, initialCfg, configPath, &FakeMetricsCache{})
+	sys := NewSystem(
+		&fakeRepo,
+		NewFallbackAlertStateStore(&mockAlertStateStore{}, &mockAlertStateStore{}),
+		initialCfg,
+		configPath,
+		&FakeMetricsCache{})
 
 	cpuNew := 70.0
 

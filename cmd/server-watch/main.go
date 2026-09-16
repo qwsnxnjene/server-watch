@@ -49,10 +49,21 @@ func main() {
 	)
 
 	client := redis2.NewClient()
-	cache := redis2.NewRedisMetricsCache(client, 30*time.Second, "metrics:")
+	cache := redis2.NewRedisMetricsCache(client, 30*time.Second, "server-watch:metrics:")
 	go redis2.StartRedisHealthCheck(ctx, client, 10*time.Second)
 
-	sys := system.NewSystem(repo, cfg, "config.yaml", cache)
+	redisAlertState := redis2.NewRedisAlertStateStore(
+		client,
+		time.Minute,
+		"server-watch:alert:",
+	)
+	memoryAlertState := system.NewInMemoryAlertStateStore()
+	alertStateStore := system.NewFallbackAlertStateStore(
+		memoryAlertState,
+		redisAlertState,
+	)
+
+	sys := system.NewSystem(repo, alertStateStore, cfg, "config.yaml", cache)
 	err = sys.CollectMetrics()
 	if err != nil {
 		slog.Error("не удалось прочитать метрики при запуске", "error", err)
