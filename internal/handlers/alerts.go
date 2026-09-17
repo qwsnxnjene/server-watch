@@ -4,18 +4,18 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"server-watch/internal/system"
+	"server-watch/internal/system/model"
 	"time"
 )
 
 type AlertResponse struct {
-	ID         int64            `json:"id"`
-	Type       system.AlertType `json:"alert_type"`
-	Timestamp  time.Time        `json:"ts"`
-	Threshold  float64          `json:"threshold"`
-	Resolved   bool             `json:"resolved"`
-	ResolvedAt *time.Time       `json:"resolvedAt"`
-	Value      float64          `json:"value"`
+	ID         int64           `json:"id"`
+	Type       model.AlertType `json:"alert_type"`
+	Timestamp  time.Time       `json:"ts"`
+	Threshold  float64         `json:"threshold"`
+	Resolved   bool            `json:"resolved"`
+	ResolvedAt *time.Time      `json:"resolvedAt"`
+	Value      float64         `json:"value"`
 }
 
 type AlertsResponse struct {

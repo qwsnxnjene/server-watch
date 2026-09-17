@@ -13,6 +13,7 @@ import (
 	redis2 "server-watch/internal/redis"
 	"server-watch/internal/storage"
 	"server-watch/internal/system"
+	"server-watch/internal/system/alert-state-store"
 	"sync"
 	"syscall"
 	"time"
@@ -57,7 +58,7 @@ func main() {
 		time.Minute,
 		"server-watch:alert:",
 	)
-	memoryAlertState := system.NewInMemoryAlertStateStore()
+	memoryAlertState := alert_state_store.NewInMemoryAlertStateStore()
 	alertStateStore := system.NewFallbackAlertStateStore(
 		memoryAlertState,
 		redisAlertState,

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"server-watch/internal/config"
 	"server-watch/internal/system"
+	"server-watch/internal/system/model"
 	"time"
 )
 
@@ -11,7 +12,7 @@ import (
 type System interface {
 	GetMetrics() system.Metrics
 	GetHistory(from, to time.Time) ([]system.Metrics, error)
-	GetAlerts(activeOnly bool) ([]system.Alert, error)
+	GetAlerts(activeOnly bool) ([]model.Alert, error)
 	GetHealth() (time.Time, error)
 
 	UpdateConfig(updatedCfg system.ConfigUpdate) error

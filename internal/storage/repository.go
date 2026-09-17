@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"server-watch/internal/system"
+	"server-watch/internal/system/model"
 	"time"
 )
 
@@ -52,7 +53,7 @@ func (s *SQLiteRepository) SaveMetrics(metrics system.Metrics) error {
 	return nil
 }
 
-func (s *SQLiteRepository) SaveAlert(alert system.Alert) (int64, error) {
+func (s *SQLiteRepository) SaveAlert(alert model.Alert) (int64, error) {
 	res, err := s.db.Exec(`
 	INSERT INTO alerts (
 	    ts,
@@ -140,7 +141,7 @@ func (s *SQLiteRepository) GetMetrics(from time.Time, to time.Time) ([]system.Me
 	return metrics, nil
 }
 
-func (s *SQLiteRepository) GetAlerts(activeOnly bool) ([]system.Alert, error) {
+func (s *SQLiteRepository) GetAlerts(activeOnly bool) ([]model.Alert, error) {
 	query := `
 	SELECT id, ts, type, threshold, value, resolved, resolved_ts
 	FROM alerts
@@ -160,7 +161,7 @@ func (s *SQLiteRepository) GetAlerts(activeOnly bool) ([]system.Alert, error) {
 	}
 	defer rows.Close()
 
-	var alerts []system.Alert
+	var alerts []model.Alert
 
 	for rows.Next() {
 		var id int64
@@ -180,9 +181,9 @@ func (s *SQLiteRepository) GetAlerts(activeOnly bool) ([]system.Alert, error) {
 			resolvedAt = &resolvedTs.Time
 		}
 
-		currAlert := system.Alert{
+		currAlert := model.Alert{
 			ID:         id,
-			Type:       system.AlertType(alertType),
+			Type:       model.AlertType(alertType),
 			Timestamp:  ts,
 			Threshold:  threshold,
 			Resolved:   resolved,
@@ -217,7 +218,7 @@ func (s *SQLiteRepository) ResolveAlert(id int64, resolvedAt time.Time) error {
 	return nil
 }
 
-func (s *SQLiteRepository) GetActiveAlert(alertType system.AlertType) (*system.Alert, error) {
+func (s *SQLiteRepository) GetActiveAlert(alertType model.AlertType) (*model.Alert, error) {
 	row := s.db.QueryRow(`
 	SELECT id, ts, type, threshold, value, resolved, resolved_ts
 	FROM alerts
@@ -245,9 +246,9 @@ func (s *SQLiteRepository) GetActiveAlert(alertType system.AlertType) (*system.A
 		resolvedAt = &resolvedTs.Time
 	}
 
-	alert := system.Alert{
+	alert := model.Alert{
 		ID:         id,
-		Type:       system.AlertType(typeAlert),
+		Type:       model.AlertType(typeAlert),
 		Timestamp:  ts,
 		Threshold:  threshold,
 		Resolved:   resolved,

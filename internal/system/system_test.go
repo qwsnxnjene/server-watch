@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"path/filepath"
 	"server-watch/internal/config"
+	"server-watch/internal/system/model"
 	"testing"
 	"time"
 )
 
 type FakeRepository struct {
 	metrics []Metrics
-	alerts  []Alert
+	alerts  []model.Alert
 
 	saveMetricsErr    error
 	saveAlertErr      error
@@ -32,7 +33,7 @@ func (f *FakeRepository) SaveMetrics(metrics Metrics) error {
 	return nil
 }
 
-func (f *FakeRepository) SaveAlert(alert Alert) (int64, error) {
+func (f *FakeRepository) SaveAlert(alert model.Alert) (int64, error) {
 	if f.saveAlertErr != nil {
 		return 0, f.saveAlertErr
 	}
@@ -58,7 +59,7 @@ func (f *FakeRepository) GetMetrics(from time.Time, to time.Time) ([]Metrics, er
 	return metrics, nil
 }
 
-func (f *FakeRepository) GetAlerts(activeOnly bool) ([]Alert, error) {
+func (f *FakeRepository) GetAlerts(activeOnly bool) ([]model.Alert, error) {
 	if f.getAlertsErr != nil {
 		return nil, f.getAlertsErr
 	}
@@ -67,7 +68,7 @@ func (f *FakeRepository) GetAlerts(activeOnly bool) ([]Alert, error) {
 		return f.alerts, nil
 	}
 
-	var alerts []Alert
+	var alerts []model.Alert
 	for _, alert := range f.alerts {
 		if !alert.Resolved {
 			alerts = append(alerts, alert)
@@ -93,7 +94,7 @@ func (f *FakeRepository) ResolveAlert(id int64, resolvedAt time.Time) error {
 	return errors.New("не удалось найти алерт с таким ID")
 }
 
-func (f *FakeRepository) GetActiveAlert(alertType AlertType) (*Alert, error) {
+func (f *FakeRepository) GetActiveAlert(alertType model.AlertType) (*model.Alert, error) {
 	if f.getActiveAlertErr != nil {
 		return nil, f.getActiveAlertErr
 	}
@@ -175,15 +176,15 @@ func TestSystem_CollectMetrics(t *testing.T) {
 }
 
 func TestSystem_ProcessAlerts_CreateAlert(t *testing.T) {
-	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]Alert, 0)}
+	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]model.Alert, 0)}
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
 
 	metrics := Metrics{
 		CPUUsage: 95.5,
 	}
-	update := alertUpdate{
+	update := model.AlertUpdate{
 		CPUCount:     AlertTriggerCount,
-		CPUCondition: ConditionHigh,
+		CPUCondition: model.ConditionHigh,
 	}
 
 	err := system.processAlerts(metrics, update)
@@ -197,8 +198,8 @@ func TestSystem_ProcessAlerts_CreateAlert(t *testing.T) {
 
 	alert := fakeRepo.alerts[0]
 
-	if alert.Type != AlertTypeHighCPU {
-		t.Fatalf("ожидали тип алерта %v, получили %v", AlertTypeHighCPU, alert.Type)
+	if alert.Type != model.AlertTypeHighCPU {
+		t.Fatalf("ожидали тип алерта %v, получили %v", model.AlertTypeHighCPU, alert.Type)
 	}
 	if alert.Threshold != HighCPUThreshold {
 		t.Fatalf("ожидали порог = %v, получили %v", HighCPUThreshold, alert.Threshold)
@@ -218,11 +219,11 @@ func TestSystem_ProcessAlerts_CreateAlert(t *testing.T) {
 }
 
 func TestSystem_ProcessAlerts_CreateAlertWithActive(t *testing.T) {
-	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]Alert, 0)}
+	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]model.Alert, 0)}
 
 	// сохраняем активный алерт до теста, чтобы новый алерт не создавался
-	_, err := fakeRepo.SaveAlert(Alert{
-		Type: AlertTypeHighCPU,
+	_, err := fakeRepo.SaveAlert(model.Alert{
+		Type: model.AlertTypeHighCPU,
 	})
 	if err != nil {
 		t.Fatalf("не удалось сохранить алерт: %v", err)
@@ -232,9 +233,9 @@ func TestSystem_ProcessAlerts_CreateAlertWithActive(t *testing.T) {
 	metrics := Metrics{
 		CPUUsage: 95.5,
 	}
-	update := alertUpdate{
+	update := model.AlertUpdate{
 		CPUCount:     AlertTriggerCount,
-		CPUCondition: ConditionHigh,
+		CPUCondition: model.ConditionHigh,
 	}
 
 	err = system.processAlerts(metrics, update)
@@ -252,7 +253,7 @@ func TestSystem_ProcessAlerts_CreateAlert_GetActiveAlertError(t *testing.T) {
 
 	fakeRepo := &FakeRepository{
 		metrics:           make([]Metrics, 0),
-		alerts:            make([]Alert, 0),
+		alerts:            make([]model.Alert, 0),
 		getActiveAlertErr: fakeErr,
 	}
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
@@ -260,9 +261,9 @@ func TestSystem_ProcessAlerts_CreateAlert_GetActiveAlertError(t *testing.T) {
 	metrics := Metrics{
 		CPUUsage: 95.5,
 	}
-	update := alertUpdate{
+	update := model.AlertUpdate{
 		CPUCount:     AlertTriggerCount,
-		CPUCondition: ConditionHigh,
+		CPUCondition: model.ConditionHigh,
 	}
 
 	err := system.processAlerts(metrics, update)
@@ -276,7 +277,7 @@ func TestSystem_ProcessAlerts_CreateAlert_SaveAlertError(t *testing.T) {
 
 	fakeRepo := &FakeRepository{
 		metrics:      make([]Metrics, 0),
-		alerts:       make([]Alert, 0),
+		alerts:       make([]model.Alert, 0),
 		saveAlertErr: fakeErr,
 	}
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
@@ -284,9 +285,9 @@ func TestSystem_ProcessAlerts_CreateAlert_SaveAlertError(t *testing.T) {
 	metrics := Metrics{
 		CPUUsage: 95.5,
 	}
-	update := alertUpdate{
+	update := model.AlertUpdate{
 		CPUCount:     AlertTriggerCount,
-		CPUCondition: ConditionHigh,
+		CPUCondition: model.ConditionHigh,
 	}
 
 	err := system.processAlerts(metrics, update)
@@ -296,11 +297,11 @@ func TestSystem_ProcessAlerts_CreateAlert_SaveAlertError(t *testing.T) {
 }
 
 func TestSystem_ProcessAlerts_ResolveAlert(t *testing.T) {
-	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]Alert, 0)}
+	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]model.Alert, 0)}
 
-	alert := Alert{
+	alert := model.Alert{
 		ID:         1,
-		Type:       AlertTypeHighCPU,
+		Type:       model.AlertTypeHighCPU,
 		Resolved:   false,
 		ResolvedAt: nil,
 	}
@@ -308,9 +309,9 @@ func TestSystem_ProcessAlerts_ResolveAlert(t *testing.T) {
 	fakeRepo.alerts = append(fakeRepo.alerts, alert)
 
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
-	update := alertUpdate{
+	update := model.AlertUpdate{
 		CPUCount:     AlertResolveCount,
-		CPUCondition: ConditionNormal,
+		CPUCondition: model.ConditionNormal,
 	}
 
 	err := system.processAlerts(Metrics{}, update)
@@ -331,14 +332,14 @@ func TestSystem_ProcessAlerts_ResolveAlert_GetActiveAlertError(t *testing.T) {
 
 	fakeRepo := &FakeRepository{
 		metrics:           make([]Metrics, 0),
-		alerts:            make([]Alert, 0),
+		alerts:            make([]model.Alert, 0),
 		getActiveAlertErr: fakeErr,
 	}
 
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
-	update := alertUpdate{
+	update := model.AlertUpdate{
 		CPUCount:     AlertResolveCount,
-		CPUCondition: ConditionNormal,
+		CPUCondition: model.ConditionNormal,
 	}
 
 	err := system.processAlerts(Metrics{}, update)
@@ -352,13 +353,13 @@ func TestSystem_ProcessAlerts_ResolveAlert_ResolveError(t *testing.T) {
 
 	fakeRepo := &FakeRepository{
 		metrics:         make([]Metrics, 0),
-		alerts:          make([]Alert, 0),
+		alerts:          make([]model.Alert, 0),
 		resolveAlertErr: fakeErr,
 	}
 
-	alert := Alert{
+	alert := model.Alert{
 		ID:         1,
-		Type:       AlertTypeHighCPU,
+		Type:       model.AlertTypeHighCPU,
 		Resolved:   false,
 		ResolvedAt: nil,
 	}
@@ -366,9 +367,9 @@ func TestSystem_ProcessAlerts_ResolveAlert_ResolveError(t *testing.T) {
 	fakeRepo.alerts = append(fakeRepo.alerts, alert)
 
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
-	update := alertUpdate{
+	update := model.AlertUpdate{
 		CPUCount:     AlertResolveCount,
-		CPUCondition: ConditionNormal,
+		CPUCondition: model.ConditionNormal,
 	}
 
 	err := system.processAlerts(Metrics{}, update)
@@ -378,12 +379,12 @@ func TestSystem_ProcessAlerts_ResolveAlert_ResolveError(t *testing.T) {
 }
 
 func TestSystem_ProcessAlerts_ResolveAlert_NoActiveAlert(t *testing.T) {
-	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]Alert, 0)}
+	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]model.Alert, 0)}
 
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
-	update := alertUpdate{
+	update := model.AlertUpdate{
 		CPUCount:     AlertResolveCount,
-		CPUCondition: ConditionNormal,
+		CPUCondition: model.ConditionNormal,
 	}
 
 	err := system.processAlerts(Metrics{}, update)
@@ -467,26 +468,26 @@ func TestSystem_GetHistory_IncludeBoundaries(t *testing.T) {
 func TestSystem_GetAlerts(t *testing.T) {
 	tests := []struct {
 		name        string
-		alertsToAdd []Alert
+		alertsToAdd []model.Alert
 		wantAlerts  int
 		activeOnly  bool
 	}{
 		{
 			name: "все алерты",
-			alertsToAdd: []Alert{
-				{Type: AlertTypeHighCPU},
-				{Type: AlertTypeHighMem},
-				{Type: AlertTypeHighCPU, Threshold: HighCPUThreshold, Resolved: true},
+			alertsToAdd: []model.Alert{
+				{Type: model.AlertTypeHighCPU},
+				{Type: model.AlertTypeHighMem},
+				{Type: model.AlertTypeHighCPU, Threshold: HighCPUThreshold, Resolved: true},
 			},
 			wantAlerts: 3,
 			activeOnly: false,
 		},
 		{
 			name: "только активные алерты",
-			alertsToAdd: []Alert{
-				{Type: AlertTypeHighCPU},
-				{Type: AlertTypeHighMem},
-				{Type: AlertTypeHighCPU, Threshold: HighCPUThreshold, Resolved: true},
+			alertsToAdd: []model.Alert{
+				{Type: model.AlertTypeHighCPU},
+				{Type: model.AlertTypeHighMem},
+				{Type: model.AlertTypeHighCPU, Threshold: HighCPUThreshold, Resolved: true},
 			},
 			wantAlerts: 2,
 			activeOnly: true,
@@ -495,7 +496,7 @@ func TestSystem_GetAlerts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fakeRepo := FakeRepository{alerts: make([]Alert, 0)}
+			fakeRepo := FakeRepository{alerts: make([]model.Alert, 0)}
 
 			for i := range tt.alertsToAdd {
 				_, err := fakeRepo.SaveAlert(tt.alertsToAdd[i])
@@ -522,7 +523,7 @@ func TestSystem_GetAlerts_Error(t *testing.T) {
 	fakeErr := errors.New("не удалось получить список алертов")
 
 	fakeRepo := FakeRepository{
-		alerts:       make([]Alert, 0),
+		alerts:       make([]model.Alert, 0),
 		getAlertsErr: fakeErr,
 	}
 

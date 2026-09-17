@@ -1,15 +1,11 @@
 package system
 
-import "errors"
+import (
+	"errors"
+	"server-watch/internal/system/model"
+)
 
 var ErrCacheMiss = errors.New("метрики отсутствуют в кэше")
-
-type AlertCondition string
-
-const (
-	ConditionNormal AlertCondition = "normal"
-	ConditionHigh   AlertCondition = "high"
-)
 
 type MetricsCache interface {
 	SetMetrics(metrics Metrics) error
@@ -17,15 +13,15 @@ type MetricsCache interface {
 }
 
 type AlertStateStore interface {
-	IncrementCount(alertType AlertType, condition AlertCondition) (int64, error)
+	IncrementCount(alertType model.AlertType, condition model.AlertCondition) (int64, error)
 
-	IsActive(alertType AlertType) (bool, error)
-	SetActive(alertType AlertType, active bool) error
+	IsActive(alertType model.AlertType) (bool, error)
+	SetActive(alertType model.AlertType, active bool) error
 }
 
 type AlertStateSnapshotStore interface {
-	GetState(alertType AlertType) (AlertState, error)
-	SetState(alertType AlertType, state AlertState) error
+	GetState(alertType model.AlertType) (model.AlertState, error)
+	SetState(alertType model.AlertType, state model.AlertState) error
 }
 
 type AlertStateBackend interface {

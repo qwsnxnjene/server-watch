@@ -1,13 +1,14 @@
-package system
+package alert_state_store
 
 import (
+	"server-watch/internal/system/model"
 	"testing"
 )
 
 func TestInMemoryAlertStateStore_IncrementCount(t *testing.T) {
 	store := NewInMemoryAlertStateStore()
 
-	val, err := store.IncrementCount(AlertTypeHighCPU, ConditionHigh)
+	val, err := store.IncrementCount(model.AlertTypeHighCPU, model.ConditionHigh)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -16,7 +17,7 @@ func TestInMemoryAlertStateStore_IncrementCount(t *testing.T) {
 		t.Fatalf("ожидали значение счетчика = 1, получили %v", val)
 	}
 
-	val, err = store.IncrementCount(AlertTypeHighCPU, ConditionHigh)
+	val, err = store.IncrementCount(model.AlertTypeHighCPU, model.ConditionHigh)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +26,7 @@ func TestInMemoryAlertStateStore_IncrementCount(t *testing.T) {
 		t.Fatalf("ожидали значение счетчика = 2, получили %v", val)
 	}
 
-	val, err = store.IncrementCount(AlertTypeHighCPU, ConditionNormal)
+	val, err = store.IncrementCount(model.AlertTypeHighCPU, model.ConditionNormal)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +35,7 @@ func TestInMemoryAlertStateStore_IncrementCount(t *testing.T) {
 		t.Fatalf("ожидали значение счетчика = 1, получили %v", val)
 	}
 
-	val, err = store.IncrementCount(AlertTypeHighCPU, ConditionNormal)
+	val, err = store.IncrementCount(model.AlertTypeHighCPU, model.ConditionNormal)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +44,7 @@ func TestInMemoryAlertStateStore_IncrementCount(t *testing.T) {
 		t.Fatalf("ожидали значение счетчика = 2, получили %v", val)
 	}
 
-	val, err = store.IncrementCount(AlertTypeHighCPU, ConditionHigh)
+	val, err = store.IncrementCount(model.AlertTypeHighCPU, model.ConditionHigh)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +57,7 @@ func TestInMemoryAlertStateStore_IncrementCount(t *testing.T) {
 func TestInMemoryAlertStateStore_IncrementCount_InvalidType(t *testing.T) {
 	store := NewInMemoryAlertStateStore()
 
-	_, err := store.IncrementCount(AlertType("UNKNOWN"), ConditionHigh)
+	_, err := store.IncrementCount(model.AlertType("UNKNOWN"), model.ConditionHigh)
 	if err == nil {
 		t.Fatal("ожидали ошибку типа алерта, получили nil")
 	}
@@ -75,12 +76,12 @@ func TestInMemoryAlertStateStore_SetActive(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			store := NewInMemoryAlertStateStore()
 
-			err := store.SetActive(AlertTypeHighCPU, tt.want)
+			err := store.SetActive(model.AlertTypeHighCPU, tt.want)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			got, err := store.IsActive(AlertTypeHighCPU)
+			got, err := store.IsActive(model.AlertTypeHighCPU)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -95,7 +96,7 @@ func TestInMemoryAlertStateStore_SetActive(t *testing.T) {
 func TestInMemoryAlertStateStore_SetActive_ValueChanging(t *testing.T) {
 	store := NewInMemoryAlertStateStore()
 
-	val, err := store.IncrementCount(AlertTypeHighCPU, ConditionHigh)
+	val, err := store.IncrementCount(model.AlertTypeHighCPU, model.ConditionHigh)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,12 +104,12 @@ func TestInMemoryAlertStateStore_SetActive_ValueChanging(t *testing.T) {
 		t.Fatalf("ожидали значение счетчика = 1, получили %v", val)
 	}
 
-	err = store.SetActive(AlertTypeHighCPU, true)
+	err = store.SetActive(model.AlertTypeHighCPU, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	val, err = store.IncrementCount(AlertTypeHighCPU, ConditionHigh)
+	val, err = store.IncrementCount(model.AlertTypeHighCPU, model.ConditionHigh)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -5,7 +5,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	"server-watch/internal/system"
+	"server-watch/internal/system/model"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -29,11 +29,11 @@ func NewRedisAlertStateStore(client *redis.Client, ttl time.Duration, prefix str
 	}
 }
 
-func (r *RedisAlertStateStore) alertKey(alertType system.AlertType, suffix string) (string, error) {
+func (r *RedisAlertStateStore) alertKey(alertType model.AlertType, suffix string) (string, error) {
 	switch alertType {
-	case system.AlertTypeHighCPU:
+	case model.AlertTypeHighCPU:
 		return r.prefix + "cpu:" + suffix, nil
-	case system.AlertTypeHighMem:
+	case model.AlertTypeHighMem:
 		return r.prefix + "mem:" + suffix, nil
 	default:
 		return "", errors.New("некорректный тип алерта")
@@ -41,7 +41,7 @@ func (r *RedisAlertStateStore) alertKey(alertType system.AlertType, suffix strin
 }
 
 // IncrementCount увеличивает/сбрасывает счетчик алерта в зависимости от состояния
-func (r *RedisAlertStateStore) IncrementCount(alertType system.AlertType, condition system.AlertCondition) (int64, error) {
+func (r *RedisAlertStateStore) IncrementCount(alertType model.AlertType, condition model.AlertCondition) (int64, error) {
 	keyCond, err := r.alertKey(alertType, "condition")
 	if err != nil {
 		return 0, err
@@ -89,7 +89,7 @@ func (r *RedisAlertStateStore) IncrementCount(alertType system.AlertType, condit
 }
 
 // IsActive проверяет активен ли алерт заданного типа
-func (r *RedisAlertStateStore) IsActive(alertType system.AlertType) (bool, error) {
+func (r *RedisAlertStateStore) IsActive(alertType model.AlertType) (bool, error) {
 	key, err := r.alertKey(alertType, "active")
 	if err != nil {
 		return false, err
@@ -111,7 +111,7 @@ func (r *RedisAlertStateStore) IsActive(alertType system.AlertType) (bool, error
 }
 
 // SetActive устанавливает статус алерта заданного типа
-func (r *RedisAlertStateStore) SetActive(alertType system.AlertType, active bool) error {
+func (r *RedisAlertStateStore) SetActive(alertType model.AlertType, active bool) error {
 	key, err := r.alertKey(alertType, "active")
 	if err != nil {
 		return err
@@ -131,7 +131,7 @@ func (r *RedisAlertStateStore) SetActive(alertType system.AlertType, active bool
 }
 
 // SetState устанавливает значение алерта
-func (r *RedisAlertStateStore) SetState(alertType system.AlertType, state system.AlertState) error {
+func (r *RedisAlertStateStore) SetState(alertType model.AlertType, state model.AlertState) error {
 	keyCond, err := r.alertKey(alertType, "condition")
 	if err != nil {
 		return err
@@ -168,6 +168,6 @@ func (r *RedisAlertStateStore) SetState(alertType system.AlertType, state system
 	return nil
 }
 
-func (r *RedisAlertStateStore) GetState(alertType system.AlertType) (system.AlertState, error) {
-	return system.AlertState{}, nil
+func (r *RedisAlertStateStore) GetState(alertType model.AlertType) (model.AlertState, error) {
+	return model.AlertState{}, nil
 }

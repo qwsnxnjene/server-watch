@@ -2,8 +2,11 @@ package redis
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"server-watch/internal/notifications"
 	"server-watch/internal/system"
+	"server-watch/internal/system/model"
 	"strconv"
 	"testing"
 	"time"
@@ -27,6 +30,7 @@ func newTestRedis(t *testing.T) *redis.Client {
 		"test:alert:cpu:active",
 		"test:alert:mem:count",
 		"test:alert:mem:active",
+		"test:notifications:queue",
 	}
 
 	cleanup := func() {
@@ -352,7 +356,7 @@ func TestRedisAlertStateStore_IncrementCount(t *testing.T) {
 
 	stateStore := NewRedisAlertStateStore(client, time.Minute, "test:alert:")
 
-	res, err := stateStore.IncrementCount(system.AlertTypeHighCPU, system.ConditionHigh)
+	res, err := stateStore.IncrementCount(model.AlertTypeHighCPU, model.ConditionHigh)
 	if err != nil {
 		t.Fatalf("ошибка инкрементирования счетчика алерта: %v", err)
 	}
@@ -360,7 +364,7 @@ func TestRedisAlertStateStore_IncrementCount(t *testing.T) {
 		t.Fatalf("ожидали значение счетчика = 1, получили %v", res)
 	}
 
-	res, err = stateStore.IncrementCount(system.AlertTypeHighCPU, system.ConditionHigh)
+	res, err = stateStore.IncrementCount(model.AlertTypeHighCPU, model.ConditionHigh)
 	if err != nil {
 		t.Fatalf("ошибка инкрементирования счетчика алерта: %v", err)
 	}
@@ -368,7 +372,7 @@ func TestRedisAlertStateStore_IncrementCount(t *testing.T) {
 		t.Fatalf("ожидали значение счетчика = 2, получили %v", res)
 	}
 
-	res, err = stateStore.IncrementCount(system.AlertTypeHighCPU, system.ConditionNormal)
+	res, err = stateStore.IncrementCount(model.AlertTypeHighCPU, model.ConditionNormal)
 	if err != nil {
 		t.Fatalf("ошибка инкрементирования счетчика алерта: %v", err)
 	}
@@ -376,7 +380,7 @@ func TestRedisAlertStateStore_IncrementCount(t *testing.T) {
 		t.Fatalf("ожидали значение счетчика = 1, получили %v", res)
 	}
 
-	res, err = stateStore.IncrementCount(system.AlertTypeHighCPU, system.ConditionNormal)
+	res, err = stateStore.IncrementCount(model.AlertTypeHighCPU, model.ConditionNormal)
 	if err != nil {
 		t.Fatalf("ошибка инкрементирования счетчика алерта: %v", err)
 	}
@@ -384,7 +388,7 @@ func TestRedisAlertStateStore_IncrementCount(t *testing.T) {
 		t.Fatalf("ожидали значение счетчика = 2, получили %v", res)
 	}
 
-	res, err = stateStore.IncrementCount(system.AlertTypeHighCPU, system.ConditionHigh)
+	res, err = stateStore.IncrementCount(model.AlertTypeHighCPU, model.ConditionHigh)
 	if err != nil {
 		t.Fatalf("ошибка инкрементирования счетчика алерта: %v", err)
 	}
@@ -400,9 +404,9 @@ func TestRedisAlertStateStore_IncrementCount(t *testing.T) {
 		t.Fatalf("не удалось получить состояние алерта: %v", err)
 	}
 
-	if condition != string(system.ConditionHigh) {
+	if condition != string(model.ConditionHigh) {
 		t.Fatalf("ожидали состояние = %q, получили %q",
-			system.ConditionHigh,
+			model.ConditionHigh,
 			condition,
 		)
 	}
@@ -444,12 +448,12 @@ func TestRedisAlertStateStore_SetActive(t *testing.T) {
 			client := newTestRedis(t)
 			stateStore := NewRedisAlertStateStore(client, time.Minute, "test:alert:")
 
-			err := stateStore.SetActive(system.AlertTypeHighCPU, tt.want)
+			err := stateStore.SetActive(model.AlertTypeHighCPU, tt.want)
 			if err != nil {
 				t.Fatalf("не удалось изменить статус алерта: %v", err)
 			}
 
-			got, err := stateStore.IsActive(system.AlertTypeHighCPU)
+			got, err := stateStore.IsActive(model.AlertTypeHighCPU)
 			if err != nil {
 				t.Fatalf("не удалось прочитать статус алерта: %v", err)
 			}
@@ -474,7 +478,7 @@ func TestRedisAlertStateStore_IsActive_Missing(t *testing.T) {
 	client := newTestRedis(t)
 	stateStore := NewRedisAlertStateStore(client, time.Minute, "test:alert:")
 
-	active, err := stateStore.IsActive(system.AlertTypeHighCPU)
+	active, err := stateStore.IsActive(model.AlertTypeHighCPU)
 	if err != nil {
 		t.Fatalf("ошибка получения статуса алерта: %v", err)
 	}
@@ -487,7 +491,7 @@ func TestRedisAlertStateStore_InvalidAlertType(t *testing.T) {
 	client := newTestRedis(t)
 	stateStore := NewRedisAlertStateStore(client, time.Minute, "test:alert:")
 
-	_, err := stateStore.IncrementCount(system.AlertType("UNKNOWN"), system.ConditionHigh)
+	_, err := stateStore.IncrementCount(model.AlertType("UNKNOWN"), model.ConditionHigh)
 	if err == nil {
 		t.Fatal("ожидали ошибку для неверного типа алерта")
 	}
@@ -498,9 +502,9 @@ func TestRedisAlertStateStore_SetState(t *testing.T) {
 
 	stateStore := NewRedisAlertStateStore(client, time.Minute, "test:alert:")
 
-	err := stateStore.SetState(system.AlertTypeHighCPU, system.AlertState{
+	err := stateStore.SetState(model.AlertTypeHighCPU, model.AlertState{
 		Count:     1,
-		Condition: system.ConditionHigh,
+		Condition: model.ConditionHigh,
 		Active:    false,
 	})
 	if err != nil {
@@ -542,18 +546,100 @@ func TestRedisAlertStateStore_SetState(t *testing.T) {
 		t.Fatalf("не удалось получить состояние алерта: %v", err)
 	}
 
-	if condition != string(system.ConditionHigh) {
+	if condition != string(model.ConditionHigh) {
 		t.Fatalf("ожидали состояние = %q, получили %q",
-			system.ConditionHigh,
+			model.ConditionHigh,
 			condition,
 		)
 	}
 
-	val, err := stateStore.IncrementCount(system.AlertTypeHighCPU, system.ConditionHigh)
+	val, err := stateStore.IncrementCount(model.AlertTypeHighCPU, model.ConditionHigh)
 	if err != nil {
 		t.Fatalf("не удалось увеличить счетчик алерта: %v", err)
 	}
 	if val != 2 {
 		t.Fatalf("ожидали значение счетчика = 2, получили %v", val)
+	}
+}
+
+func TestRedisNotificationQueue_Push(t *testing.T) {
+	client := newTestRedis(t)
+
+	queue := NewRedisNotificationQueue(client, "test:")
+
+	now := time.Now().UTC().Truncate(time.Second)
+
+	notification := notifications.Notification{
+		Type:      model.AlertTypeHighCPU,
+		Action:    notifications.ActionCreated,
+		Value:     3,
+		Threshold: 10,
+		Timestamp: now,
+	}
+
+	err := queue.Push(notification)
+	if err != nil {
+		t.Fatalf("ошибка Push: %v", err)
+	}
+
+	length, err := client.LLen(context.Background(), "test:notifications:queue").Result()
+	if err != nil {
+		t.Fatalf("не удалось получить длину очереди: %v", err)
+	}
+
+	if length != 1 {
+		t.Fatalf("ожидали 1 элемент в очереди, получили %v", length)
+	}
+
+	elems, err := client.LRange(
+		context.Background(),
+		"test:notifications:queue",
+		0, -1).Result()
+	if err != nil {
+		t.Fatalf("не удалось получить список элементов очереди: %v", err)
+	}
+
+	if len(elems) != 1 {
+		t.Fatalf("ожидали 1 элемент в очереди, получили %v", len(elems))
+	}
+
+	var got notifications.Notification
+	err = json.Unmarshal([]byte(elems[0]), &got)
+	if err != nil {
+		t.Fatalf("не удалось декодировать уведомление: %v", err)
+	}
+
+	if got != notification {
+		t.Fatalf("ожидали %+v, получили %+v", notification, got)
+	}
+}
+
+func TestRedisNotificationQueue_Consume(t *testing.T) {
+	client := newTestRedis(t)
+
+	queue := NewRedisNotificationQueue(client, "test:")
+
+	now := time.Now().UTC().Truncate(time.Second)
+
+	notification := notifications.Notification{
+		Type:      model.AlertTypeHighCPU,
+		Action:    notifications.ActionCreated,
+		Value:     3,
+		Threshold: 10,
+		Timestamp: now,
+	}
+
+	err := queue.Push(notification)
+	if err != nil {
+		t.Fatalf("ошибка Push: %v", err)
+	}
+
+	got, err := queue.Consume(context.Background())
+	if err != nil {
+		t.Fatalf("ошибка Consume: %v", err)
+	}
+
+	if notification != got {
+		t.Fatalf("ожидали %+v, получили %+v", notification, got)
 	}
 }

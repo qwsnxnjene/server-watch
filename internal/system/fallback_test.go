@@ -2,6 +2,7 @@ package system
 
 import (
 	"errors"
+	"server-watch/internal/system/model"
 	"testing"
 )
 
@@ -22,27 +23,27 @@ type mockAlertStateStore struct {
 	active         bool
 }
 
-func (m *mockAlertStateStore) IncrementCount(alertType AlertType, condition AlertCondition) (int64, error) {
+func (m *mockAlertStateStore) IncrementCount(alertType model.AlertType, condition model.AlertCondition) (int64, error) {
 	m.incrementCalls++
 	return m.incrementValue, m.incrementErr
 }
 
-func (m *mockAlertStateStore) IsActive(alertType AlertType) (bool, error) {
+func (m *mockAlertStateStore) IsActive(alertType model.AlertType) (bool, error) {
 	m.isActiveCalls++
 	return m.isActiveValue, m.isActiveErr
 }
 
-func (m *mockAlertStateStore) SetActive(alertType AlertType, active bool) error {
+func (m *mockAlertStateStore) SetActive(alertType model.AlertType, active bool) error {
 	m.active = active
 	m.setActiveCalls++
 	return m.setActiveErr
 }
 
-func (m *mockAlertStateStore) GetState(alertType AlertType) (AlertState, error) {
-	return AlertState{}, nil
+func (m *mockAlertStateStore) GetState(alertType model.AlertType) (model.AlertState, error) {
+	return model.AlertState{}, nil
 }
 
-func (m *mockAlertStateStore) SetState(alertType AlertType, state AlertState) error {
+func (m *mockAlertStateStore) SetState(alertType model.AlertType, state model.AlertState) error {
 	return nil
 }
 
@@ -121,7 +122,7 @@ func TestFallbackAlertStateStore_IncrementCount(t *testing.T) {
 
 			store := NewFallbackAlertStateStore(memMock, redisMock)
 
-			got, err := store.IncrementCount(AlertTypeHighCPU, ConditionHigh)
+			got, err := store.IncrementCount(model.AlertTypeHighCPU, model.ConditionHigh)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("ожидали ошибку (или её отсутствие), получили %v", err)
 			}
@@ -215,7 +216,7 @@ func TestFallbackAlertStateStore_IsActive(t *testing.T) {
 
 			store := NewFallbackAlertStateStore(memMock, redisMock)
 
-			got, err := store.IsActive(AlertTypeHighCPU)
+			got, err := store.IsActive(model.AlertTypeHighCPU)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("ожидали ошибку (или её отсутствие), получили %v", err)
 			}
@@ -320,7 +321,7 @@ func TestFallbackAlertStateStore_SetActive(t *testing.T) {
 
 			store := NewFallbackAlertStateStore(memMock, redisMock)
 
-			err := store.SetActive(AlertTypeHighCPU, tt.active)
+			err := store.SetActive(model.AlertTypeHighCPU, tt.active)
 
 			if (err != nil) != tt.wantErr {
 				t.Fatalf(

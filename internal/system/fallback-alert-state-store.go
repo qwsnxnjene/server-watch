@@ -3,6 +3,7 @@ package system
 import (
 	"fmt"
 	"log/slog"
+	"server-watch/internal/system/model"
 )
 
 type FallbackAlertStateStore struct {
@@ -19,7 +20,7 @@ func NewFallbackAlertStateStore(mem, redis AlertStateBackend) *FallbackAlertStat
 	}
 }
 
-func (f *FallbackAlertStateStore) IncrementCount(alertType AlertType, condition AlertCondition) (int64, error) {
+func (f *FallbackAlertStateStore) IncrementCount(alertType model.AlertType, condition model.AlertCondition) (int64, error) {
 	var redisErr error
 
 	// Если Redis ранее падал - сначала пытаемся восстановить
@@ -59,7 +60,7 @@ func (f *FallbackAlertStateStore) IncrementCount(alertType AlertType, condition 
 	return memoryValue, nil
 }
 
-func (f *FallbackAlertStateStore) IsActive(alertType AlertType) (bool, error) {
+func (f *FallbackAlertStateStore) IsActive(alertType model.AlertType) (bool, error) {
 	redisActive, redisErr := f.redis.IsActive(alertType)
 	if redisErr == nil {
 		return redisActive, nil
@@ -77,7 +78,7 @@ func (f *FallbackAlertStateStore) IsActive(alertType AlertType) (bool, error) {
 	return memActive, nil
 }
 
-func (f *FallbackAlertStateStore) SetActive(alertType AlertType, active bool) error {
+func (f *FallbackAlertStateStore) SetActive(alertType model.AlertType, active bool) error {
 	if f.redisFailed {
 		if err := f.resyncAll(); err == nil {
 			f.redisFailed = false
@@ -119,7 +120,7 @@ func (f *FallbackAlertStateStore) SetActive(alertType AlertType, active bool) er
 }
 
 func (f *FallbackAlertStateStore) resyncAll() error {
-	for _, alertType := range []AlertType{AlertTypeHighMem, AlertTypeHighCPU} {
+	for _, alertType := range []model.AlertType{model.AlertTypeHighMem, model.AlertTypeHighCPU} {
 
 		state, err := f.memory.GetState(alertType)
 		if err != nil {

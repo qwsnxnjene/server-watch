@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"server-watch/internal/config"
 	"server-watch/internal/system"
+	"server-watch/internal/system/model"
 	"strings"
 	"testing"
 	"time"
@@ -26,7 +27,7 @@ type FakeSystem struct {
 
 	alertsErr        error
 	alertsActiveOnly bool
-	alerts           []system.Alert
+	alerts           []model.Alert
 
 	cfg              config.Config
 	configErr        error
@@ -48,7 +49,7 @@ func (f *FakeSystem) GetHistory(from, to time.Time) ([]system.Metrics, error) {
 	return f.history, nil
 }
 
-func (f *FakeSystem) GetAlerts(activeOnly bool) ([]system.Alert, error) {
+func (f *FakeSystem) GetAlerts(activeOnly bool) ([]model.Alert, error) {
 	f.alertsActiveOnly = activeOnly
 
 	if f.alertsErr != nil {
@@ -521,10 +522,10 @@ func TestHandler_AlertsHandler_QueryParam(t *testing.T) {
 func TestHandler_AlertsHandler_JSON(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
-	alerts := []system.Alert{
+	alerts := []model.Alert{
 		{
 			ID:         1,
-			Type:       system.AlertTypeHighCPU,
+			Type:       model.AlertTypeHighCPU,
 			Timestamp:  time.Time{},
 			Threshold:  system.HighCPUThreshold,
 			Resolved:   false,
@@ -533,7 +534,7 @@ func TestHandler_AlertsHandler_JSON(t *testing.T) {
 		},
 		{
 			ID:         2,
-			Type:       system.AlertTypeHighMem,
+			Type:       model.AlertTypeHighMem,
 			Timestamp:  time.Time{},
 			Threshold:  system.HighMemThreshold,
 			Resolved:   true,
@@ -546,7 +547,7 @@ func TestHandler_AlertsHandler_JSON(t *testing.T) {
 		Alerts: []AlertResponse{
 			{
 				ID:         1,
-				Type:       system.AlertTypeHighCPU,
+				Type:       model.AlertTypeHighCPU,
 				Timestamp:  time.Time{},
 				Threshold:  system.HighCPUThreshold,
 				Resolved:   false,
@@ -555,7 +556,7 @@ func TestHandler_AlertsHandler_JSON(t *testing.T) {
 			},
 			{
 				ID:         2,
-				Type:       system.AlertTypeHighMem,
+				Type:       model.AlertTypeHighMem,
 				Timestamp:  time.Time{},
 				Threshold:  system.HighMemThreshold,
 				Resolved:   true,
