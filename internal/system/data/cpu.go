@@ -1,4 +1,4 @@
-package system
+package data
 
 import (
 	"fmt"
@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// getCPUUsage считывает информацию о загрузке CPU с интервалом в секунду.
+// GetCPUUsage считывает информацию о загрузке CPU с интервалом в секунду.
 // Затем по формуле высчитывает уровень загрузки CPU
-func getCPUUsage() (float64, error) {
+func GetCPUUsage() (float64, error) {
 	statsFirst, err := readCPUStats()
 	if err != nil {
 		return 0, fmt.Errorf("ошибка получения данных о процессоре: %w", err)

@@ -6,7 +6,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"server-watch/internal/config"
 	"server-watch/internal/system"
+	"server-watch/internal/system/model"
+	"strings"
 	"testing"
 	"time"
 )
@@ -24,7 +27,11 @@ type FakeSystem struct {
 
 	alertsErr        error
 	alertsActiveOnly bool
-	alerts           []system.Alert
+	alerts           []model.Alert
+
+	cfg              config.Config
+	configErr        error
+	lastConfigUpdate system.ConfigUpdate
 }
 
 func (f *FakeSystem) GetMetrics() system.Metrics {
@@ -42,7 +49,7 @@ func (f *FakeSystem) GetHistory(from, to time.Time) ([]system.Metrics, error) {
 	return f.history, nil
 }
 
-func (f *FakeSystem) GetAlerts(activeOnly bool) ([]system.Alert, error) {
+func (f *FakeSystem) GetAlerts(activeOnly bool) ([]model.Alert, error) {
 	f.alertsActiveOnly = activeOnly
 
 	if f.alertsErr != nil {
@@ -54,6 +61,19 @@ func (f *FakeSystem) GetAlerts(activeOnly bool) ([]system.Alert, error) {
 
 func (f *FakeSystem) GetHealth() (time.Time, error) {
 	return f.lastSuccess, f.lastError
+}
+
+func (f *FakeSystem) UpdateConfig(updatedCfg system.ConfigUpdate) error {
+	if f.configErr != nil {
+		return f.configErr
+	}
+
+	f.lastConfigUpdate = updatedCfg
+	return f.configErr
+}
+
+func (f *FakeSystem) GetConfig() config.Config {
+	return f.cfg
 }
 
 func TestHandler_MetricsHandler(t *testing.T) {
@@ -69,9 +89,13 @@ func TestHandler_MetricsHandler(t *testing.T) {
 		},
 	}
 
-	handler := NewHandler(fakeSystem)
+	prometheusHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := NewHandler(fakeSystem, prometheusHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req.Header.Set("Accept", "application/json")
 	rw := httptest.NewRecorder()
 
 	handler.MetricsHandler(rw, req)
@@ -102,6 +126,61 @@ func TestHandler_MetricsHandler(t *testing.T) {
 
 	if got := rw.Header().Get("Content-Type"); got != "application/json" {
 		t.Fatalf("ожидался Content-Type application/json, получен %q", got)
+	}
+}
+
+func TestAcceptsPrometheus(t *testing.T) {
+	tests := []struct {
+		name    string
+		accept  string
+		want    bool
+		wantErr bool
+	}{
+		{
+			name:   "Prometheus text",
+			accept: "text/plain",
+			want:   true,
+		},
+		{
+			name:   "OpenMetrics",
+			accept: "application/openmetrics-text",
+			want:   true,
+		},
+		{
+			name:   "JSON",
+			accept: "application/json",
+			want:   false,
+		},
+		{
+			name:   "Accept отсутствует",
+			accept: "",
+			want:   false,
+		},
+		{
+			name:   "Prometheus text disabled",
+			accept: "text/plain;q=0",
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+
+			if tt.accept != "" {
+				req.Header.Set("Accept", tt.accept)
+			}
+
+			got, err := acceptsPrometheus(req)
+
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("acceptsPrometheus() error = %v, ожидали = %v", err, tt.wantErr)
+			}
+
+			if got != tt.want {
+				t.Fatalf("acceptsPrometheus() = %v, ожидали %v", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -152,7 +231,10 @@ func TestHandler_HealthHandler(t *testing.T) {
 				lastSuccess: tt.lastSuccess,
 			}
 
-			handler := NewHandler(fakeSystem)
+			prometheusHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			})
+			handler := NewHandler(fakeSystem, prometheusHandler)
 
 			req := httptest.NewRequest(http.MethodGet, "/health", nil)
 			rw := httptest.NewRecorder()
@@ -200,7 +282,10 @@ func TestHandler_HistoryHandler_JSON(t *testing.T) {
 
 	query := "?from=" + from.Format(time.RFC3339) + "&to=" + to.Format(time.RFC3339)
 
-	handler := NewHandler(fakeSystem)
+	prometheusHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := NewHandler(fakeSystem, prometheusHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/history"+query, nil)
 	rw := httptest.NewRecorder()
@@ -292,7 +377,10 @@ func TestHandler_HistoryHandler_QueryParams(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeSystem := &FakeSystem{}
 
-			handler := NewHandler(fakeSystem)
+			prometheusHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			})
+			handler := NewHandler(fakeSystem, prometheusHandler)
 
 			req := httptest.NewRequest(http.MethodGet, "/history"+tt.query, nil)
 			rw := httptest.NewRecorder()
@@ -353,7 +441,10 @@ func TestHandler_HistoryHandler_GetHistoryError(t *testing.T) {
 
 	query := "?from=" + from.Format(time.RFC3339) + "&to=" + to.Format(time.RFC3339)
 
-	handler := NewHandler(fakeSystem)
+	prometheusHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := NewHandler(fakeSystem, prometheusHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/history"+query, nil)
 	rw := httptest.NewRecorder()
@@ -401,7 +492,10 @@ func TestHandler_AlertsHandler_QueryParam(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeSystem := &FakeSystem{}
 
-			handler := NewHandler(fakeSystem)
+			prometheusHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			})
+			handler := NewHandler(fakeSystem, prometheusHandler)
 
 			req := httptest.NewRequest(http.MethodGet, "/alerts"+tt.query, nil)
 			rw := httptest.NewRecorder()
@@ -428,10 +522,10 @@ func TestHandler_AlertsHandler_QueryParam(t *testing.T) {
 func TestHandler_AlertsHandler_JSON(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
-	alerts := []system.Alert{
+	alerts := []model.Alert{
 		{
 			ID:         1,
-			Type:       system.AlertTypeHighCPU,
+			Type:       model.AlertTypeHighCPU,
 			Timestamp:  time.Time{},
 			Threshold:  system.HighCPUThreshold,
 			Resolved:   false,
@@ -440,7 +534,7 @@ func TestHandler_AlertsHandler_JSON(t *testing.T) {
 		},
 		{
 			ID:         2,
-			Type:       system.AlertTypeHighMem,
+			Type:       model.AlertTypeHighMem,
 			Timestamp:  time.Time{},
 			Threshold:  system.HighMemThreshold,
 			Resolved:   true,
@@ -453,7 +547,7 @@ func TestHandler_AlertsHandler_JSON(t *testing.T) {
 		Alerts: []AlertResponse{
 			{
 				ID:         1,
-				Type:       system.AlertTypeHighCPU,
+				Type:       model.AlertTypeHighCPU,
 				Timestamp:  time.Time{},
 				Threshold:  system.HighCPUThreshold,
 				Resolved:   false,
@@ -462,7 +556,7 @@ func TestHandler_AlertsHandler_JSON(t *testing.T) {
 			},
 			{
 				ID:         2,
-				Type:       system.AlertTypeHighMem,
+				Type:       model.AlertTypeHighMem,
 				Timestamp:  time.Time{},
 				Threshold:  system.HighMemThreshold,
 				Resolved:   true,
@@ -476,7 +570,10 @@ func TestHandler_AlertsHandler_JSON(t *testing.T) {
 		alerts: alerts,
 	}
 
-	handler := NewHandler(fakeSystem)
+	prometheusHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := NewHandler(fakeSystem, prometheusHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/alerts?active_only=true", nil)
 	rw := httptest.NewRecorder()
@@ -506,7 +603,10 @@ func TestHandler_AlertsHandler_GetAlertsError(t *testing.T) {
 		alertsErr: fakeErr,
 	}
 
-	handler := NewHandler(fakeSystem)
+	prometheusHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := NewHandler(fakeSystem, prometheusHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/alerts", nil)
 	rw := httptest.NewRecorder()
@@ -516,5 +616,93 @@ func TestHandler_AlertsHandler_GetAlertsError(t *testing.T) {
 	if rw.Code != http.StatusInternalServerError {
 		t.Fatalf("ожидался код ответа %v, получили %v",
 			http.StatusInternalServerError, rw.Code)
+	}
+}
+
+func TestHandler_ConfigHandler_Correct(t *testing.T) {
+	fakeSystem := &FakeSystem{
+		cfg: config.Config{
+			CPUThreshold: 45,
+			MemThreshold: 90,
+			TriggerCount: 3,
+			ResolveCount: 3,
+			SlackEnabled: false,
+			SlackURL:     "",
+		},
+	}
+
+	prometheusHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := NewHandler(fakeSystem, prometheusHandler)
+
+	req := httptest.NewRequest(http.MethodPost,
+		"/config",
+		strings.NewReader(`{"cpu_threshold":45}`))
+	rw := httptest.NewRecorder()
+
+	handler.ConfigHandler(rw, req)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("ожидали код ответа %v, получили %v", http.StatusOK, rw.Code)
+	}
+
+	var got config.Config
+	err := json.NewDecoder(rw.Body).Decode(&got)
+	if err != nil {
+		t.Fatalf("не удалось декодировать ответ: %v", err)
+	}
+
+	if got != fakeSystem.cfg {
+		t.Fatalf("ожидали %+v, получили %+v", fakeSystem.cfg, got)
+	}
+}
+
+func TestHandler_ConfigHandler_Invalid(t *testing.T) {
+	tests := []struct {
+		name      string
+		data      string
+		wantCode  int
+		configErr error
+	}{
+		{
+			name:     "некорректный JSON",
+			data:     `{"cpu_threshold":}`,
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:      "невалидная конфигурация",
+			data:      `{"cpu_threshold":130}`,
+			wantCode:  http.StatusBadRequest,
+			configErr: config.ErrInvalidConfig,
+		},
+		{
+			name:      "ошибка UpdateConfig",
+			data:      `{"cpu_threshold":70}`,
+			wantCode:  http.StatusInternalServerError,
+			configErr: errors.New("не удалось обновить конфиг"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeSystem := &FakeSystem{
+				configErr: tt.configErr,
+			}
+
+			prometheusHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			})
+			handler := NewHandler(fakeSystem, prometheusHandler)
+
+			req := httptest.NewRequest(http.MethodPost,
+				"/config",
+				strings.NewReader(tt.data))
+			rw := httptest.NewRecorder()
+
+			handler.ConfigHandler(rw, req)
+			if rw.Code != tt.wantCode {
+				t.Fatalf("ожидали код ответа %v, получили %v", tt.wantCode, rw.Code)
+			}
+		})
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 )
 
+// MetricsResponse представляет текущие метрики в HTTP API
 type MetricsResponse struct {
 	CPUPercent  float64 `json:"cpu_percent"`
 	MemPercent  float64 `json:"mem_percent"`
@@ -19,12 +20,10 @@ type MetricsResponse struct {
 	DiskTotalGB float64 `json:"disk_total_gb"`
 }
 
-// MetricsHandler отвечает на запросы по адресу /metrics и возвращает
-// актуальные на данный момент метрики
+// MetricsHandler обрабатывает запросы к /metrics и возвращает текущие метрики
 func (h *Handler) MetricsHandler(rw http.ResponseWriter, r *http.Request) {
 	slog.Info("получен запрос", "path", "/metrics")
 
-	// перенаправляем на Prometheus
 	if ok, err := acceptsPrometheus(r); err == nil {
 		if ok {
 			h.prometheusHandler.ServeHTTP(rw, r)
@@ -59,6 +58,11 @@ func (h *Handler) MetricsHandler(rw http.ResponseWriter, r *http.Request) {
 }
 
 func acceptsPrometheus(r *http.Request) (bool, error) {
+	acc := r.Header.Get("Accept")
+	if acc == "" {
+		return false, nil
+	}
+
 	for _, accept := range strings.Split(r.Header.Get("Accept"), ",") {
 		mediaType, params, err := mime.ParseMediaType(accept)
 		if err != nil {

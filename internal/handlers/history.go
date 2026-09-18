@@ -7,12 +7,12 @@ import (
 	"time"
 )
 
+// HistoryResponse представляет историю измерений метрик в HTTP API
 type HistoryResponse struct {
 	Metrics []MetricsResponse `json:"metrics"`
 }
 
-// HistoryHandler отвечает на запросы по адресу /history и возвращает список измерений метрик
-// в заданный промежуток времени от from до to
+// HistoryHandler обрабатывает запросы к /history и возвращает историю измерений метрик
 func (h *Handler) HistoryHandler(rw http.ResponseWriter, r *http.Request) {
 	slog.Info("получен запрос", "path", "/history")
 

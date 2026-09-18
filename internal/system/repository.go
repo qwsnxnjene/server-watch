@@ -1,15 +1,16 @@
 package system
 
 import (
+	"server-watch/internal/system/model"
 	"time"
 )
 
-// Repository - интерфейс для хранения данных
+// Repository определяет хранилище данных, необходимое системному слою
 type Repository interface {
 	SaveMetrics(metrics Metrics) error
-	SaveAlert(alert Alert) (int64, error)
+	SaveAlert(alert model.Alert) (int64, error)
 	GetMetrics(from time.Time, to time.Time) ([]Metrics, error)
-	GetAlerts(activeOnly bool) ([]Alert, error)
+	GetAlerts(activeOnly bool) ([]model.Alert, error)
 	ResolveAlert(id int64, resolvedAt time.Time) error
-	GetActiveAlert(alertType AlertType) (*Alert, error)
+	GetActiveAlert(alertType model.AlertType) (*model.Alert, error)
 }

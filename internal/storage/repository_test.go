@@ -2,10 +2,12 @@ package storage
 
 import (
 	"database/sql"
-	_ "modernc.org/sqlite"
 	"server-watch/internal/system"
+	"server-watch/internal/system/model"
 	"testing"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 func newTestDB(t *testing.T) *sql.DB {
@@ -101,8 +103,8 @@ func TestSQLiteRepository_SaveAlert(t *testing.T) {
 	db := newTestDB(t)
 	repo := NewSQLiteRepository(db)
 
-	alert := system.Alert{
-		Type:       system.AlertTypeHighCPU,
+	alert := model.Alert{
+		Type:       model.AlertTypeHighCPU,
 		Timestamp:  time.Now(),
 		Threshold:  32.5,
 		Resolved:   false,
@@ -116,7 +118,7 @@ func TestSQLiteRepository_SaveAlert(t *testing.T) {
 	}
 	alert.ID = id
 
-	alertGot, err := repo.GetActiveAlert(system.AlertTypeHighCPU)
+	alertGot, err := repo.GetActiveAlert(model.AlertTypeHighCPU)
 	if err != nil {
 		t.Fatalf("не удалось получить алерт из базы данных: %v", err)
 	}
@@ -148,8 +150,8 @@ func TestSQLiteRepository_ResolveAlert(t *testing.T) {
 	db := newTestDB(t)
 	repo := NewSQLiteRepository(db)
 
-	alert := system.Alert{
-		Type:       system.AlertTypeHighCPU,
+	alert := model.Alert{
+		Type:       model.AlertTypeHighCPU,
 		Timestamp:  time.Now(),
 		Threshold:  32.5,
 		Resolved:   false,
@@ -163,7 +165,7 @@ func TestSQLiteRepository_ResolveAlert(t *testing.T) {
 	}
 	alert.ID = id
 
-	alertGot, err := repo.GetActiveAlert(system.AlertTypeHighCPU)
+	alertGot, err := repo.GetActiveAlert(model.AlertTypeHighCPU)
 	if err != nil {
 		t.Fatalf("не удалось получить сохраненный алерт из базы данных: %v", err)
 	}
@@ -176,7 +178,7 @@ func TestSQLiteRepository_ResolveAlert(t *testing.T) {
 		t.Fatalf("не удалось зарезолвить алерт: %v", err)
 	}
 
-	alertGot, err = repo.GetActiveAlert(system.AlertTypeHighCPU)
+	alertGot, err = repo.GetActiveAlert(model.AlertTypeHighCPU)
 	if err != nil {
 		t.Fatalf("не удалось получить алерт из базы данных: %v", err)
 	}
@@ -189,8 +191,8 @@ func TestSQLiteRepository_GetAlerts(t *testing.T) {
 	db := newTestDB(t)
 	repo := NewSQLiteRepository(db)
 
-	alert1 := system.Alert{
-		Type:       system.AlertTypeHighCPU,
+	alert1 := model.Alert{
+		Type:       model.AlertTypeHighCPU,
 		Timestamp:  time.Now(),
 		Threshold:  32.5,
 		Resolved:   false,
@@ -198,8 +200,8 @@ func TestSQLiteRepository_GetAlerts(t *testing.T) {
 		Value:      23.2,
 	}
 
-	alert2 := system.Alert{
-		Type:       system.AlertTypeHighMem,
+	alert2 := model.Alert{
+		Type:       model.AlertTypeHighMem,
 		Timestamp:  time.Now(),
 		Threshold:  45.2,
 		Resolved:   false,
