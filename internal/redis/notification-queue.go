@@ -11,11 +11,13 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// RedisNotificationQueue реализует очередь уведомлений на основе Redis
 type RedisNotificationQueue struct {
 	client *redis.Client
 	prefix string
 }
 
+// NewRedisNotificationQueue создаёт Redis-очередь уведомлений
 func NewRedisNotificationQueue(client *redis.Client, prefix string) *RedisNotificationQueue {
 	return &RedisNotificationQueue{
 		client: client,
@@ -27,6 +29,7 @@ func (r *RedisNotificationQueue) queueKey() string {
 	return r.prefix + "notifications:queue"
 }
 
+// Push добавляет уведомление в Redis-очередь
 func (r *RedisNotificationQueue) Push(notification notifications.Notification) error {
 	data, err := json.Marshal(notification)
 	if err != nil {
@@ -40,6 +43,8 @@ func (r *RedisNotificationQueue) Push(notification notifications.Notification) e
 	return nil
 }
 
+// Consume извлекает уведомление из Redis-очереди, ожидая его появления ограниченное время.
+// Если очередь пуста, возвращает пустое уведомление без ошибки.
 func (r *RedisNotificationQueue) Consume(ctx context.Context) (notifications.Notification, error) {
 	data, err := r.client.BRPop(ctx, 5*time.Second, r.queueKey()).Result()
 	if err != nil {

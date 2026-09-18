@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// NotificationAction определяет действие, связанное с алертом
 type NotificationAction string
 
 const (
@@ -12,6 +13,7 @@ const (
 	ActionResolved NotificationAction = "resolved"
 )
 
+// Notification содержит данные для отправки уведомления об изменении состояния алерта
 type Notification struct {
 	Type      model.AlertType    `json:"type"`
 	Action    NotificationAction `json:"action"`

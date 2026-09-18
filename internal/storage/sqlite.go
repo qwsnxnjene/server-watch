@@ -4,12 +4,14 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+
 	_ "modernc.org/sqlite"
 )
 
 //go:embed migrations/001_init.sql
 var initMigration string
 
+// NewSQLite открывает SQLite-базу по указанному пути и проверяет соединение
 func NewSQLite(path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -24,6 +26,7 @@ func NewSQLite(path string) (*sql.DB, error) {
 	return db, nil
 }
 
+// Migrate применяет встроенную SQL-миграцию к базе данных
 func Migrate(db *sql.DB) error {
 	_, err := db.Exec(initMigration)
 	if err != nil {

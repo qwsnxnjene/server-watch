@@ -6,6 +6,8 @@ import (
 	"server-watch/internal/system/model"
 )
 
+// FallbackAlertStateStore использует Redis как основное хранилище состояния алертов
+// и переключается на in-memory хранилище при его недоступности
 type FallbackAlertStateStore struct {
 	memory AlertStateBackend
 	redis  AlertStateBackend
@@ -13,6 +15,8 @@ type FallbackAlertStateStore struct {
 	redisFailed bool
 }
 
+// NewFallbackAlertStateStore создаёт хранилище с Redis в качестве основного
+// и in-memory хранилищем для fallback
 func NewFallbackAlertStateStore(mem, redis AlertStateBackend) *FallbackAlertStateStore {
 	return &FallbackAlertStateStore{
 		memory: mem,
@@ -20,6 +24,9 @@ func NewFallbackAlertStateStore(mem, redis AlertStateBackend) *FallbackAlertStat
 	}
 }
 
+// IncrementCount увеличивает счётчик состояния через Redis,
+// а при его недоступности использует in-memory хранилище.
+// После восстановления Redis данные синхронизируются перед продолжением работы
 func (f *FallbackAlertStateStore) IncrementCount(alertType model.AlertType, condition model.AlertCondition) (int64, error) {
 	var redisErr error
 
@@ -60,6 +67,8 @@ func (f *FallbackAlertStateStore) IncrementCount(alertType model.AlertType, cond
 	return memoryValue, nil
 }
 
+// IsActive возвращает статус алерта, используя Redis или in-memory fallback
+// при недоступности Redis
 func (f *FallbackAlertStateStore) IsActive(alertType model.AlertType) (bool, error) {
 	redisActive, redisErr := f.redis.IsActive(alertType)
 	if redisErr == nil {
@@ -78,6 +87,8 @@ func (f *FallbackAlertStateStore) IsActive(alertType model.AlertType) (bool, err
 	return memActive, nil
 }
 
+// SetActive устанавливает статус алерта в Redis или in-memory fallback,
+// если Redis недоступен
 func (f *FallbackAlertStateStore) SetActive(alertType model.AlertType, active bool) error {
 	if f.redisFailed {
 		if err := f.resyncAll(); err == nil {
@@ -119,6 +130,8 @@ func (f *FallbackAlertStateStore) SetActive(alertType model.AlertType, active bo
 	return nil
 }
 
+// resyncAll переносит состояния всех поддерживаемых типов алертов
+// из in-memory хранилища обратно в Redis
 func (f *FallbackAlertStateStore) resyncAll() error {
 	for _, alertType := range []model.AlertType{model.AlertTypeHighMem, model.AlertTypeHighCPU} {
 

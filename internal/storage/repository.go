@@ -9,17 +9,19 @@ import (
 	"time"
 )
 
+// SQLiteRepository реализует работу с метриками и алертами через SQLite
 type SQLiteRepository struct {
 	db *sql.DB
 }
 
+// NewSQLiteRepository создаёт репозиторий на основе SQLite-соединения
 func NewSQLiteRepository(db *sql.DB) *SQLiteRepository {
 	return &SQLiteRepository{
 		db: db,
 	}
 }
 
-// SaveMetrics сохраняет измерение метрик в БД
+// SaveMetrics сохраняет измерение системных метрик в SQLite
 func (s *SQLiteRepository) SaveMetrics(metrics system.Metrics) error {
 	_, err := s.db.Exec(`
     INSERT INTO metrics (
@@ -53,6 +55,7 @@ func (s *SQLiteRepository) SaveMetrics(metrics system.Metrics) error {
 	return nil
 }
 
+// SaveAlert сохраняет алерт в SQLite и возвращает его идентификатор
 func (s *SQLiteRepository) SaveAlert(alert model.Alert) (int64, error) {
 	res, err := s.db.Exec(`
 	INSERT INTO alerts (
@@ -91,6 +94,7 @@ func (s *SQLiteRepository) SaveAlert(alert model.Alert) (int64, error) {
 	return id, nil
 }
 
+// GetMetrics возвращает измерения метрик за указанный временной диапазон
 func (s *SQLiteRepository) GetMetrics(from time.Time, to time.Time) ([]system.Metrics, error) {
 	rows, err := s.db.Query(`
 	SELECT ts, cpu, mem_used_mb, mem_total_mb, disk_used_gb, disk_total_gb
@@ -141,6 +145,8 @@ func (s *SQLiteRepository) GetMetrics(from time.Time, to time.Time) ([]system.Me
 	return metrics, nil
 }
 
+// GetAlerts возвращает сохранённые алерты.
+// При activeOnly == true возвращаются только активные алерты
 func (s *SQLiteRepository) GetAlerts(activeOnly bool) ([]model.Alert, error) {
 	query := `
 	SELECT id, ts, type, threshold, value, resolved, resolved_ts
@@ -202,6 +208,7 @@ func (s *SQLiteRepository) GetAlerts(activeOnly bool) ([]model.Alert, error) {
 	return alerts, nil
 }
 
+// ResolveAlert помечает алерт как разрешённый и сохраняет время разрешения
 func (s *SQLiteRepository) ResolveAlert(id int64, resolvedAt time.Time) error {
 	_, err := s.db.Exec(`
 	UPDATE alerts
@@ -218,6 +225,8 @@ func (s *SQLiteRepository) ResolveAlert(id int64, resolvedAt time.Time) error {
 	return nil
 }
 
+// GetActiveAlert возвращает активный алерт указанного типа.
+// Если активного алерта нет, возвращается nil без ошибки
 func (s *SQLiteRepository) GetActiveAlert(alertType model.AlertType) (*model.Alert, error) {
 	row := s.db.QueryRow(`
 	SELECT id, ts, type, threshold, value, resolved, resolved_ts

@@ -8,7 +8,8 @@ import (
 	"time"
 )
 
-// System - интерфейс для уровня бизнес-логики
+// System определяет интерфейс бизнес-логики,
+// необходимый HTTP-обработчикам
 type System interface {
 	GetMetrics() system.Metrics
 	GetHistory(from, to time.Time) ([]system.Metrics, error)
@@ -24,6 +25,7 @@ type Handler struct {
 	prometheusHandler http.Handler
 }
 
+// NewHandler создаёт HTTP-обработчик и связывает его с бизнес-логикой
 func NewHandler(sys System, promHandler http.Handler) *Handler {
 	return &Handler{
 		system:            sys,

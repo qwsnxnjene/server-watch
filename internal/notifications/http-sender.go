@@ -9,11 +9,13 @@ import (
 	"time"
 )
 
+// HttpSender отправляет уведомления через HTTP webhook
 type HttpSender struct {
 	client *http.Client
 	url    string
 }
 
+// NewHttpSender создаёт HTTP-отправитель уведомлений
 func NewHttpSender(client *http.Client, url string) *HttpSender {
 	return &HttpSender{
 		client: client,
@@ -25,6 +27,8 @@ type slackPayload struct {
 	Text string `json:"text"`
 }
 
+// Send отправляет уведомление через HTTP webhook с повторными попытками
+// для временных ошибок сети и сервера
 func (h *HttpSender) Send(notification Notification) error {
 	toSend := slackPayload{Text: formatNotification(notification)}
 	data, err := json.Marshal(toSend)

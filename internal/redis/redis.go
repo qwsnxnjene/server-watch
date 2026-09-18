@@ -9,6 +9,7 @@ import (
 	"github.com/redis/go-redis/v9/logging"
 )
 
+// NewClient создаёт Redis-клиент с настройками подключения по умолчанию
 func NewClient() *redis.Client {
 	logging.Disable()
 
@@ -19,7 +20,8 @@ func NewClient() *redis.Client {
 	})
 }
 
-// StartRedisHealthCheck интервально проверяет подключение к Redis
+// StartRedisHealthCheck периодически проверяет доступность Redis
+// и завершает работу при отмене контекста
 func StartRedisHealthCheck(ctx context.Context, client *redis.Client, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()

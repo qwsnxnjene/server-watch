@@ -6,11 +6,14 @@ import (
 	"sync"
 )
 
+// InMemoryAlertStateStore хранит состояния алертов в памяти.
+// Доступ к состояниям защищён mutex для безопасной работы из нескольких горутин
 type InMemoryAlertStateStore struct {
 	mu     sync.RWMutex
 	states map[model.AlertType]model.AlertState
 }
 
+// NewInMemoryAlertStateStore создаёт пустое in-memory хранилище состояний алертов
 func NewInMemoryAlertStateStore() *InMemoryAlertStateStore {
 	return &InMemoryAlertStateStore{
 		states: make(map[model.AlertType]model.AlertState),
@@ -21,6 +24,8 @@ func validAlertType(alertType model.AlertType) bool {
 	return alertType == model.AlertTypeHighMem || alertType == model.AlertTypeHighCPU
 }
 
+// IncrementCount увеличивает счётчик для указанного типа и условия.
+// При изменении условия счётчик начинается заново с единицы
 func (i *InMemoryAlertStateStore) IncrementCount(alertType model.AlertType, condition model.AlertCondition) (int64, error) {
 	if !validAlertType(alertType) {
 		return 0, errors.New("некорректный тип алерта")
@@ -51,6 +56,7 @@ func (i *InMemoryAlertStateStore) IncrementCount(alertType model.AlertType, cond
 	return value, nil
 }
 
+// IsActive возвращает текущий статус алерта указанного типа
 func (i *InMemoryAlertStateStore) IsActive(alertType model.AlertType) (bool, error) {
 	if !validAlertType(alertType) {
 		return false, errors.New("некорректный тип алерта")
@@ -66,6 +72,7 @@ func (i *InMemoryAlertStateStore) IsActive(alertType model.AlertType) (bool, err
 	}
 }
 
+// SetActive устанавливает статус алерта указанного типа
 func (i *InMemoryAlertStateStore) SetActive(alertType model.AlertType, active bool) error {
 	if !validAlertType(alertType) {
 		return errors.New("некорректный тип алерта")
@@ -86,6 +93,8 @@ func (i *InMemoryAlertStateStore) SetActive(alertType model.AlertType, active bo
 	return nil
 }
 
+// GetState возвращает полное состояние алерта указанного типа.
+// Если состояние ещё не сохранено, возвращается его нулевое значение без ошибки
 func (i *InMemoryAlertStateStore) GetState(alertType model.AlertType) (model.AlertState, error) {
 	if !validAlertType(alertType) {
 		return model.AlertState{}, errors.New("некорректный тип алерта")

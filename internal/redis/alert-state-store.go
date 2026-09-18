@@ -14,13 +14,14 @@ import (
 //go:embed set_state.lua
 var setStateScript string
 
-// RedisAlertStateStore - хранилище состояний алертов в Redis
+// RedisAlertStateStore хранит состояния алертов в Redis
 type RedisAlertStateStore struct {
 	client *redis.Client
 	ttl    time.Duration
 	prefix string
 }
 
+// NewRedisAlertStateStore создаёт хранилище состояний алертов в Redis
 func NewRedisAlertStateStore(client *redis.Client, ttl time.Duration, prefix string) *RedisAlertStateStore {
 	return &RedisAlertStateStore{
 		client: client,
@@ -40,7 +41,8 @@ func (r *RedisAlertStateStore) alertKey(alertType model.AlertType, suffix string
 	}
 }
 
-// IncrementCount увеличивает/сбрасывает счетчик алерта в зависимости от состояния
+// IncrementCount увеличивает счётчик при сохранении условия
+// или сбрасывает его при изменении условия
 func (r *RedisAlertStateStore) IncrementCount(alertType model.AlertType, condition model.AlertCondition) (int64, error) {
 	keyCond, err := r.alertKey(alertType, "condition")
 	if err != nil {
@@ -88,7 +90,7 @@ func (r *RedisAlertStateStore) IncrementCount(alertType model.AlertType, conditi
 	}
 }
 
-// IsActive проверяет активен ли алерт заданного типа
+// IsActive проверяет, активен ли алерт заданного типа
 func (r *RedisAlertStateStore) IsActive(alertType model.AlertType) (bool, error) {
 	key, err := r.alertKey(alertType, "active")
 	if err != nil {
@@ -130,7 +132,7 @@ func (r *RedisAlertStateStore) SetActive(alertType model.AlertType, active bool)
 	return nil
 }
 
-// SetState устанавливает значение алерта
+// SetState атомарно сохраняет полное состояние алерта в Redis
 func (r *RedisAlertStateStore) SetState(alertType model.AlertType, state model.AlertState) error {
 	keyCond, err := r.alertKey(alertType, "condition")
 	if err != nil {

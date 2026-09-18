@@ -7,11 +7,13 @@ import (
 	"time"
 )
 
+// Worker получает уведомления из очереди и передаёт их зарегистрированным отправителям
 type Worker struct {
 	queue   Queue
 	senders []Sender
 }
 
+// NewWorker создаёт worker с указанной очередью и отправителями
 func NewWorker(queue Queue, senders []Sender) *Worker {
 	return &Worker{
 		queue:   queue,
@@ -19,6 +21,8 @@ func NewWorker(queue Queue, senders []Sender) *Worker {
 	}
 }
 
+// Run запускает цикл обработки уведомлений до отмены контекста.
+// Ошибки чтения из очереди повторяются с задержкой
 func (w *Worker) Run(ctx context.Context) {
 	for {
 		notification, err := w.queue.Consume(ctx)

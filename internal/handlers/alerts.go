@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// AlertResponse представляет алерт в HTTP API
 type AlertResponse struct {
 	ID         int64           `json:"id"`
 	Type       model.AlertType `json:"alert_type"`
@@ -18,12 +19,13 @@ type AlertResponse struct {
 	Value      float64         `json:"value"`
 }
 
+// AlertsResponse представляет ответ API со списком алертов
 type AlertsResponse struct {
 	Alerts []AlertResponse `json:"alerts"`
 }
 
-// AlertsHandler отвечает за запросы по адресу /alerts и возвращает список всех/только активных алертов
-// в зависимости от значения параметра active_only
+// AlertsHandler обрабатывает запросы к /alerts и возвращает список алертов.
+// Параметр active_only ограничивает результат только активными алертами.
 func (h *Handler) AlertsHandler(rw http.ResponseWriter, r *http.Request) {
 	slog.Info("получен запрос", "path", "/alerts")
 

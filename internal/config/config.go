@@ -14,6 +14,7 @@ import (
 var ErrInvalidYAML = errors.New("некорректный YAML")
 var ErrInvalidConfig = errors.New("некорректная конфигурация")
 
+// Config содержит настройки сервиса
 type Config struct {
 	CPUThreshold float64 `yaml:"cpu_threshold"`
 	MemThreshold float64 `yaml:"mem_threshold"`
@@ -23,8 +24,9 @@ type Config struct {
 	SlackURL     string  `yaml:"slack_url"`
 }
 
-// интеграция Config в main и в System
-
+// Load загружает конфигурацию из YAML-файла и переменных окружения.
+// При отсутствии файла создаёт его со значениями по умолчанию.
+// После загрузки конфигурация проходит валидацию
 func Load(path string) (Config, error) {
 	cfg := DefaultConfig()
 
@@ -58,6 +60,7 @@ func Load(path string) (Config, error) {
 	return cfg, nil
 }
 
+// Validate проверяет конфигурацию на допустимые значения
 func Validate(cfg Config) error {
 	if cfg.CPUThreshold < 0 || cfg.CPUThreshold > 100 {
 		return fmt.Errorf("%w: значение CPUThreshold должно быть от 0 до 100, получили: %v",
@@ -82,8 +85,8 @@ func Validate(cfg Config) error {
 	skipValidation := cfg.SlackURL == "" && !cfg.SlackEnabled
 
 	if !validateURL(cfg.SlackURL) && !skipValidation {
-		return fmt.Errorf("%w: значение SlackURL некорректно: %v",
-			ErrInvalidConfig, cfg.SlackURL)
+		return fmt.Errorf("%w: значение SlackURL некорректно",
+			ErrInvalidConfig)
 	}
 
 	return nil
@@ -109,6 +112,7 @@ func validateURL(value string) bool {
 	return true
 }
 
+// DefaultConfig возвращает конфигурацию со значениями по умолчанию.
 func DefaultConfig() Config {
 	return Config{
 		CPUThreshold: 80,
@@ -119,6 +123,8 @@ func DefaultConfig() Config {
 	}
 }
 
+// loadFromEnv переопределяет значения конфигурации переменными окружения,
+// если они заданы
 func loadFromEnv(cfg *Config) error {
 	value, exists := os.LookupEnv("CPU_THRESHOLD")
 	if exists {
@@ -178,6 +184,7 @@ func loadFromEnv(cfg *Config) error {
 	return nil
 }
 
+// loadFromYAML загружает значения конфигурации из YAML-файла
 func loadFromYAML(path string, cfg *Config) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -191,6 +198,8 @@ func loadFromYAML(path string, cfg *Config) error {
 	return nil
 }
 
+// SaveToYAML сохраняет конфигурацию в YAML-файл.
+// Файл создаётся с правами доступа только для владельца
 func SaveToYAML(path string, cfg Config) error {
 	data, err := yaml.Marshal(cfg)
 	if err != nil {

@@ -21,17 +21,16 @@ import (
 )
 
 func main() {
-	// логгер
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)
 
-	// контекст для graceful shutdown
+	// отменяем общий контекст при SIGINT/SIGTERM,
+	// чтобы остановить фоновые горутины и завершить сервис корректно
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	// инициализация базы данных
 	db, repo, err := setupDatabase()
 	if err != nil {
 		slog.Error("ошибка инициализации базы данных", "error", err)
@@ -39,7 +38,6 @@ func main() {
 	}
 	defer db.Close()
 
-	// загрузка конфигурации сервиса
 	cfg, err := config.Load("config.yaml")
 	if err != nil {
 		slog.Error("не удалось загрузить конфигурацию", "error", err)
@@ -51,14 +49,14 @@ func main() {
 		"trigger_count", cfg.TriggerCount,
 		"resolve_count", cfg.ResolveCount,
 		"slack_enabled", cfg.SlackEnabled,
-		"slack_url", cfg.SlackURL,
 	)
 
-	// настройка Redis
 	client := redis2.NewClient()
 	cache := redis2.NewRedisMetricsCache(client, 30*time.Second, "server-watch:metrics:")
 	go redis2.StartRedisHealthCheck(ctx, client, 10*time.Second)
 
+	// Redis используется как основное хранилище состояния алертов.
+	// При недоступности Redis сервис переключается на in-memory fallback
 	redisAlertState := redis2.NewRedisAlertStateStore(
 		client,
 		time.Minute,
@@ -79,7 +77,8 @@ func main() {
 	}
 	worker := notifications.NewWorker(notificationQueue, senders)
 
-	// горутина для отправки уведомлений
+	// Запускаем worker, который читает уведомления из очереди
+	// и передаёт их зарегистрированным отправителям
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
@@ -99,7 +98,6 @@ func main() {
 		os.Exit(1)
 	}
 	promHandler := system.PrometheusHandler()
-
 
 	metricsErrCh := startMetricsCollector(ctx, sys, &wg)
 
@@ -144,6 +142,8 @@ func newHTTPServer(sys *system.System, promHandler *http.Handler) *http.Server {
 	}
 }
 
+// startMetricsCollector запускает периодический сбор системных метрик
+// и возвращает канал для передачи критической ошибки сборщика
 func startMetricsCollector(ctx context.Context, sys *system.System, wg *sync.WaitGroup) <-chan error {
 	errCh := make(chan error, 1)
 
@@ -194,6 +194,8 @@ func startHTTPServer(server *http.Server, wg *sync.WaitGroup) <-chan error {
 	return errCh
 }
 
+// setupDatabase открывает SQLite-базу, применяет миграции
+// и создаёт репозиторий для работы с ней
 func setupDatabase() (*sql.DB, *storage.SQLiteRepository, error) {
 	db, err := storage.NewSQLite("server-watch.db")
 	if err != nil {

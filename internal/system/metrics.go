@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// Metrics содержит значения системных метрик и дату проведенного замера
 type Metrics struct {
 	CPUUsage   float64
 	MemUsage   float64

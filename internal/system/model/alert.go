@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// AlertType - тип алерта (CPU или MEM)
+// AlertType определяет тип системного алерта
 type AlertType string
 
 const (
@@ -10,6 +10,7 @@ const (
 	AlertTypeHighMem AlertType = "HIGH_MEM"
 )
 
+// Alert представляет сохранённый алерт и его текущее состояние
 type Alert struct {
 	ID         int64
 	Type       AlertType
@@ -20,6 +21,7 @@ type Alert struct {
 	Value      float64
 }
 
+// AlertCondition определяет условие, при котором находится мониторируемый ресурс
 type AlertCondition string
 
 const (
@@ -27,6 +29,7 @@ const (
 	ConditionHigh   AlertCondition = "high"
 )
 
+// AlertUpdate содержит текущее состояние счётчиков и условий для CPU и памяти
 type AlertUpdate struct {
 	CPUCount     int64
 	CPUCondition AlertCondition

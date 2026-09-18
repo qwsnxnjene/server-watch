@@ -11,12 +11,14 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// RedisMetricsCache хранит последние системные метрики в Redis с ограниченным временем жизни
 type RedisMetricsCache struct {
 	client *redis.Client
 	ttl    time.Duration
 	prefix string
 }
 
+// NewRedisMetricsCache создаёт Redis-кэш для системных метрик
 func NewRedisMetricsCache(client *redis.Client, ttl time.Duration, prefix string) *RedisMetricsCache {
 	return &RedisMetricsCache{
 		client: client,
@@ -25,6 +27,7 @@ func NewRedisMetricsCache(client *redis.Client, ttl time.Duration, prefix string
 	}
 }
 
+// SetMetrics сохраняет текущие системные метрики в Redis
 func (r *RedisMetricsCache) SetMetrics(metrics system.Metrics) error {
 	err := r.setMetric(r.prefix+"cpu", fmt.Sprintf("%.2f", metrics.CPUUsage))
 	if err != nil {
@@ -71,6 +74,7 @@ func (r *RedisMetricsCache) setMetric(key, value string) error {
 	return nil
 }
 
+// GetMetrics загружает метрики из Redis и рассчитывает производные показатели использования памяти и диска
 func (r *RedisMetricsCache) GetMetrics() (system.Metrics, error) {
 	metricsToReturn := system.Metrics{}
 

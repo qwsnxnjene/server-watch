@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Repository - интерфейс для хранения данных
+// Repository определяет хранилище данных, необходимое системному слою
 type Repository interface {
 	SaveMetrics(metrics Metrics) error
 	SaveAlert(alert model.Alert) (int64, error)

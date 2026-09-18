@@ -9,8 +9,7 @@ import (
 	"server-watch/internal/system"
 )
 
-// ConfigHandler отвечает на запросы по адресу /config и обновляет конфигурацию сервиса
-// в зависимости от переданных параметров
+// ConfigHandler обрабатывает запросы к /config и обновляет конфигурацию сервиса
 func (h *Handler) ConfigHandler(rw http.ResponseWriter, r *http.Request) {
 	slog.Info("получен запрос", "path", "/config")
 

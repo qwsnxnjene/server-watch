@@ -5,6 +5,8 @@ import (
 	"server-watch/internal/config"
 )
 
+// ConfigUpdate содержит частичное обновление конфигурации.
+// Поля с nil не изменяют соответствующие настройки
 type ConfigUpdate struct {
 	CPUThreshold *float64 `json:"cpu_threshold,omitempty"`
 	MemThreshold *float64 `json:"mem_threshold,omitempty"`
@@ -14,6 +16,8 @@ type ConfigUpdate struct {
 	SlackURL     *string  `json:"slack_url,omitempty"`
 }
 
+// UpdateConfig применяет переданные изменения конфигурации после валидации.
+// Новая конфигурация сохраняется в памяти и затем записывается в YAML-файл
 func (s *System) UpdateConfig(updatedCfg ConfigUpdate) error {
 	s.mu.RLock()
 	currCfg := s.config
@@ -43,7 +47,8 @@ func (s *System) UpdateConfig(updatedCfg ConfigUpdate) error {
 		return err
 	}
 
-	// по ТЗ обновляем конфиг в любом случае, даже если в файл сохранить не удалось
+	// Сначала применяем конфигурацию в памяти, а сохранение в файл выполняем отдельно.
+	// Ошибка записи не отменяет уже применённые настройки
 	s.mu.Lock()
 	s.config = currCfg
 	s.mu.Unlock()
@@ -61,6 +66,7 @@ func (s *System) UpdateConfig(updatedCfg ConfigUpdate) error {
 	return nil
 }
 
+// GetConfig возвращает текущую конфигурацию сервиса
 func (s *System) GetConfig() config.Config {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

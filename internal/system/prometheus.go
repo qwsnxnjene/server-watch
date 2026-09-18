@@ -2,9 +2,10 @@ package system
 
 import (
 	"fmt"
+	"net/http"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"net/http"
 )
 
 var cpuPercent = prometheus.NewGauge(prometheus.GaugeOpts{
@@ -44,6 +45,7 @@ var alertsTotal = prometheus.NewCounter(prometheus.CounterOpts{
 
 var registry = prometheus.NewRegistry()
 
+// RegisterPrometheusMetrics регистрирует метрики сервиса в Prometheus registry
 func RegisterPrometheusMetrics() error {
 	err := registry.Register(cpuPercent)
 	if err != nil {
@@ -91,6 +93,7 @@ func updatePrometheusMetrics(metrics Metrics) {
 	diskTotalGb.Set(metrics.DiskTotal)
 }
 
+// PrometheusHandler возвращает HTTP-обработчик для сбора метрик Prometheus
 func PrometheusHandler() http.Handler {
 	return promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 }
