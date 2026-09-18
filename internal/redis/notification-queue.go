@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"server-watch/internal/notifications"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -40,8 +41,12 @@ func (r *RedisNotificationQueue) Push(notification notifications.Notification) e
 }
 
 func (r *RedisNotificationQueue) Consume(ctx context.Context) (notifications.Notification, error) {
-	data, err := r.client.BRPop(ctx, 0, r.queueKey()).Result()
+	data, err := r.client.BRPop(ctx, 5*time.Second, r.queueKey()).Result()
 	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return notifications.Notification{}, nil
+		}
+
 		return notifications.Notification{},
 			fmt.Errorf("не удалось получить уведомление из Redis: %w", err)
 	}

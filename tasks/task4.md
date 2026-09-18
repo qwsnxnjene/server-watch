@@ -103,7 +103,7 @@
     slack:
       enabled: true
       webhook_url: "https://hooks.slack.com/services/xxx/yyy/zzz"
-    webhook:
+    url:
       enabled: false
       url: "https://my-corporate-system.com/alerts"
   ```

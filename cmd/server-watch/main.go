@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"server-watch/internal/config"
 	"server-watch/internal/handlers"
+	"server-watch/internal/notifications"
 	redis2 "server-watch/internal/redis"
 	"server-watch/internal/storage"
 	"server-watch/internal/system"
@@ -20,14 +21,17 @@ import (
 )
 
 func main() {
+	// логгер
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)
 
+	// контекст для graceful shutdown
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	// инициализация базы данных
 	db, repo, err := setupDatabase()
 	if err != nil {
 		slog.Error("ошибка инициализации базы данных", "error", err)
@@ -35,6 +39,7 @@ func main() {
 	}
 	defer db.Close()
 
+	// загрузка конфигурации сервиса
 	cfg, err := config.Load("config.yaml")
 	if err != nil {
 		slog.Error("не удалось загрузить конфигурацию", "error", err)
@@ -49,6 +54,7 @@ func main() {
 		"slack_url", cfg.SlackURL,
 	)
 
+	// настройка Redis
 	client := redis2.NewClient()
 	cache := redis2.NewRedisMetricsCache(client, 30*time.Second, "server-watch:metrics:")
 	go redis2.StartRedisHealthCheck(ctx, client, 10*time.Second)
@@ -63,8 +69,25 @@ func main() {
 		memoryAlertState,
 		redisAlertState,
 	)
+	notificationQueue := redis2.NewRedisNotificationQueue(client, "server-watch:")
 
-	sys := system.NewSystem(repo, alertStateStore, cfg, "config.yaml", cache)
+	var senders []notifications.Sender
+
+	if cfg.SlackEnabled {
+		slackSender := notifications.NewHttpSender(http.DefaultClient, cfg.SlackURL)
+		senders = append(senders, slackSender)
+	}
+	worker := notifications.NewWorker(notificationQueue, senders)
+
+	// горутина для отправки уведомлений
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		worker.Run(ctx)
+	}()
+
+	sys := system.NewSystem(repo, alertStateStore, cfg, "config.yaml", cache, notificationQueue)
 	err = sys.CollectMetrics()
 	if err != nil {
 		slog.Error("не удалось прочитать метрики при запуске", "error", err)
@@ -77,7 +100,7 @@ func main() {
 	}
 	promHandler := system.PrometheusHandler()
 
-	wg := sync.WaitGroup{}
+
 	metricsErrCh := startMetricsCollector(ctx, sys, &wg)
 
 	server := newHTTPServer(sys, &promHandler)
@@ -101,8 +124,9 @@ func main() {
 		slog.Error("ошибка при остановке сервера", "error", err)
 		os.Exit(1)
 	}
-	slog.Info("выполнение программы остановлено")
+
 	wg.Wait()
+	slog.Info("выполнение программы остановлено")
 }
 
 func newHTTPServer(sys *system.System, promHandler *http.Handler) *http.Server {

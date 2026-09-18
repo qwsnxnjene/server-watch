@@ -1,10 +1,12 @@
 package system
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
 	"server-watch/internal/config"
+	"server-watch/internal/notifications"
 	"server-watch/internal/system/model"
 	"testing"
 	"time"
@@ -123,13 +125,32 @@ func (f *FakeMetricsCache) GetMetrics() (Metrics, error) {
 	return f.metrics, f.getErr
 }
 
-func newTestSystem(fakeRepo *FakeRepository, fakeCache *FakeMetricsCache) *System {
+type mockNotificationQueue struct {
+	notifications []notifications.Notification
+	err           error
+}
+
+func (m *mockNotificationQueue) Push(notification notifications.Notification) error {
+	if m.err != nil {
+		return m.err
+	}
+
+	m.notifications = append(m.notifications, notification)
+	return nil
+}
+
+func (m *mockNotificationQueue) Consume(ctx context.Context) (notifications.Notification, error) {
+	panic("not implemented")
+}
+
+func newTestSystem(fakeRepo *FakeRepository, fakeCache *FakeMetricsCache, fakeQueue *mockNotificationQueue) *System {
 	return NewSystem(
 		fakeRepo,
 		NewFallbackAlertStateStore(&mockAlertStateStore{}, &mockAlertStateStore{}),
 		config.Config{},
 		"",
-		fakeCache)
+		fakeCache,
+		fakeQueue)
 }
 
 func TestSystem_CollectMetrics(t *testing.T) {
@@ -165,7 +186,7 @@ func TestSystem_CollectMetrics(t *testing.T) {
 				saveMetricsErr: tt.repoErr,
 			}
 
-			system := newTestSystem(fakeRepo, &FakeMetricsCache{setErr: tt.cacheErr})
+			system := newTestSystem(fakeRepo, &FakeMetricsCache{setErr: tt.cacheErr}, &mockNotificationQueue{})
 
 			err := system.CollectMetrics()
 			if !errors.Is(err, tt.wantErr) {
@@ -175,9 +196,10 @@ func TestSystem_CollectMetrics(t *testing.T) {
 	}
 }
 
-func TestSystem_ProcessAlerts_CreateAlert(t *testing.T) {
+func TestSystem_ProcessAlerts_CreateAlertAndNotification(t *testing.T) {
 	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]model.Alert, 0)}
-	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
+	queue := &mockNotificationQueue{}
+	system := newTestSystem(fakeRepo, &FakeMetricsCache{}, queue)
 
 	metrics := Metrics{
 		CPUUsage: 95.5,
@@ -216,6 +238,44 @@ func TestSystem_ProcessAlerts_CreateAlert(t *testing.T) {
 	if alert.Timestamp.IsZero() {
 		t.Fatal("у созданного алерта не установлен timestamp")
 	}
+
+	if len(queue.notifications) != 1 {
+		t.Fatalf("ожидалось 1 уведомление, получили %d", len(queue.notifications))
+	}
+
+	notification := queue.notifications[0]
+
+	if notification.Type != model.AlertTypeHighCPU {
+		t.Fatalf("ожидали тип уведомления %v, получили %v",
+			model.AlertTypeHighCPU,
+			notification.Type,
+		)
+	}
+
+	if notification.Action != notifications.ActionCreated {
+		t.Fatalf("ожидали действие %v, получили %v",
+			notifications.ActionCreated,
+			notification.Action,
+		)
+	}
+
+	if notification.Value != metrics.CPUUsage {
+		t.Fatalf("ожидали значение %v, получили %v",
+			metrics.CPUUsage,
+			notification.Value,
+		)
+	}
+
+	if notification.Threshold != HighCPUThreshold {
+		t.Fatalf("ожидали порог %v, получили %v",
+			HighCPUThreshold,
+			notification.Threshold,
+		)
+	}
+
+	if notification.Timestamp.IsZero() {
+		t.Fatal("у уведомления не установлен timestamp")
+	}
 }
 
 func TestSystem_ProcessAlerts_CreateAlertWithActive(t *testing.T) {
@@ -228,7 +288,7 @@ func TestSystem_ProcessAlerts_CreateAlertWithActive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("не удалось сохранить алерт: %v", err)
 	}
-	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
+	system := newTestSystem(fakeRepo, &FakeMetricsCache{}, &mockNotificationQueue{})
 
 	metrics := Metrics{
 		CPUUsage: 95.5,
@@ -256,7 +316,7 @@ func TestSystem_ProcessAlerts_CreateAlert_GetActiveAlertError(t *testing.T) {
 		alerts:            make([]model.Alert, 0),
 		getActiveAlertErr: fakeErr,
 	}
-	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
+	system := newTestSystem(fakeRepo, &FakeMetricsCache{}, &mockNotificationQueue{})
 
 	metrics := Metrics{
 		CPUUsage: 95.5,
@@ -280,7 +340,7 @@ func TestSystem_ProcessAlerts_CreateAlert_SaveAlertError(t *testing.T) {
 		alerts:       make([]model.Alert, 0),
 		saveAlertErr: fakeErr,
 	}
-	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
+	system := newTestSystem(fakeRepo, &FakeMetricsCache{}, &mockNotificationQueue{})
 
 	metrics := Metrics{
 		CPUUsage: 95.5,
@@ -302,13 +362,15 @@ func TestSystem_ProcessAlerts_ResolveAlert(t *testing.T) {
 	alert := model.Alert{
 		ID:         1,
 		Type:       model.AlertTypeHighCPU,
+		Threshold:  HighCPUThreshold,
 		Resolved:   false,
 		ResolvedAt: nil,
 	}
 
 	fakeRepo.alerts = append(fakeRepo.alerts, alert)
 
-	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
+	queue := &mockNotificationQueue{}
+	system := newTestSystem(fakeRepo, &FakeMetricsCache{}, queue)
 	update := model.AlertUpdate{
 		CPUCount:     AlertResolveCount,
 		CPUCondition: model.ConditionNormal,
@@ -325,6 +387,37 @@ func TestSystem_ProcessAlerts_ResolveAlert(t *testing.T) {
 	if fakeRepo.alerts[0].ResolvedAt == nil {
 		t.Fatal("время резолва не установлено")
 	}
+
+	if len(queue.notifications) != 1 {
+		t.Fatalf("ожидалось 1 уведомление, получили %d", len(queue.notifications))
+	}
+
+	notification := queue.notifications[0]
+
+	if notification.Type != model.AlertTypeHighCPU {
+		t.Fatalf("ожидали тип уведомления %v, получили %v",
+			model.AlertTypeHighCPU,
+			notification.Type,
+		)
+	}
+
+	if notification.Action != notifications.ActionResolved {
+		t.Fatalf("ожидали действие %v, получили %v",
+			notifications.ActionResolved,
+			notification.Action,
+		)
+	}
+
+	if notification.Threshold != HighCPUThreshold {
+		t.Fatalf("ожидали порог %v, получили %v",
+			HighCPUThreshold,
+			notification.Threshold,
+		)
+	}
+
+	if notification.Timestamp.IsZero() {
+		t.Fatal("у уведомления не установлен timestamp")
+	}
 }
 
 func TestSystem_ProcessAlerts_ResolveAlert_GetActiveAlertError(t *testing.T) {
@@ -336,7 +429,7 @@ func TestSystem_ProcessAlerts_ResolveAlert_GetActiveAlertError(t *testing.T) {
 		getActiveAlertErr: fakeErr,
 	}
 
-	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
+	system := newTestSystem(fakeRepo, &FakeMetricsCache{}, &mockNotificationQueue{})
 	update := model.AlertUpdate{
 		CPUCount:     AlertResolveCount,
 		CPUCondition: model.ConditionNormal,
@@ -366,7 +459,7 @@ func TestSystem_ProcessAlerts_ResolveAlert_ResolveError(t *testing.T) {
 
 	fakeRepo.alerts = append(fakeRepo.alerts, alert)
 
-	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
+	system := newTestSystem(fakeRepo, &FakeMetricsCache{}, &mockNotificationQueue{})
 	update := model.AlertUpdate{
 		CPUCount:     AlertResolveCount,
 		CPUCondition: model.ConditionNormal,
@@ -381,7 +474,7 @@ func TestSystem_ProcessAlerts_ResolveAlert_ResolveError(t *testing.T) {
 func TestSystem_ProcessAlerts_ResolveAlert_NoActiveAlert(t *testing.T) {
 	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]model.Alert, 0)}
 
-	system := newTestSystem(fakeRepo, &FakeMetricsCache{})
+	system := newTestSystem(fakeRepo, &FakeMetricsCache{}, &mockNotificationQueue{})
 	update := model.AlertUpdate{
 		CPUCount:     AlertResolveCount,
 		CPUCondition: model.ConditionNormal,
@@ -408,7 +501,7 @@ func TestSystem_GetHistory(t *testing.T) {
 		}
 	}
 
-	system := newTestSystem(&fakeRepo, &FakeMetricsCache{})
+	system := newTestSystem(&fakeRepo, &FakeMetricsCache{}, &mockNotificationQueue{})
 	metrics, err := system.GetHistory(now.Add(-time.Minute), now.Add(time.Minute))
 	if err != nil {
 		t.Fatalf("не удалось получить историю измерений метрик: %v", err)
@@ -429,7 +522,7 @@ func TestSystem_GetHistory_GetMetricsError(t *testing.T) {
 
 	now := time.Now().UTC()
 
-	system := newTestSystem(&fakeRepo, &FakeMetricsCache{})
+	system := newTestSystem(&fakeRepo, &FakeMetricsCache{}, &mockNotificationQueue{})
 	_, err := system.GetHistory(now.Add(-time.Minute), now.Add(time.Minute))
 	if !errors.Is(err, fakeErr) {
 		t.Fatalf("ожидали ошибку %v, получили %v", fakeErr, err)
@@ -454,7 +547,7 @@ func TestSystem_GetHistory_IncludeBoundaries(t *testing.T) {
 		}
 	}
 
-	system := newTestSystem(&fakeRepo, &FakeMetricsCache{})
+	system := newTestSystem(&fakeRepo, &FakeMetricsCache{}, &mockNotificationQueue{})
 	metrics, err := system.GetHistory(now.Add(-time.Minute), now.Add(time.Minute))
 	if err != nil {
 		t.Fatalf("не удалось получить историю измерений метрик: %v", err)
@@ -505,7 +598,7 @@ func TestSystem_GetAlerts(t *testing.T) {
 				}
 			}
 
-			system := newTestSystem(&fakeRepo, &FakeMetricsCache{})
+			system := newTestSystem(&fakeRepo, &FakeMetricsCache{}, &mockNotificationQueue{})
 
 			alerts, err := system.GetAlerts(tt.activeOnly)
 			if err != nil {
@@ -527,7 +620,7 @@ func TestSystem_GetAlerts_Error(t *testing.T) {
 		getAlertsErr: fakeErr,
 	}
 
-	system := newTestSystem(&fakeRepo, &FakeMetricsCache{})
+	system := newTestSystem(&fakeRepo, &FakeMetricsCache{}, &mockNotificationQueue{})
 
 	_, err := system.GetAlerts(true)
 	if !errors.Is(err, fakeErr) {
@@ -545,7 +638,8 @@ func TestSystem_UpdateConfig(t *testing.T) {
 		NewFallbackAlertStateStore(&mockAlertStateStore{}, &mockAlertStateStore{}),
 		initialCfg,
 		configPath,
-		&FakeMetricsCache{})
+		&FakeMetricsCache{},
+		&mockNotificationQueue{})
 
 	cpuCorrect := 45.0
 
@@ -592,6 +686,7 @@ func TestSystem_UpdateConfig_InvalidConfig(t *testing.T) {
 		initialCfg,
 		configPath,
 		&FakeMetricsCache{},
+		&mockNotificationQueue{},
 	)
 
 	cpuInvalid := 135.0
@@ -630,7 +725,8 @@ func TestSystem_UpdateConfig_SaveError(t *testing.T) {
 		NewFallbackAlertStateStore(&mockAlertStateStore{}, &mockAlertStateStore{}),
 		initialCfg,
 		configPath,
-		&FakeMetricsCache{})
+		&FakeMetricsCache{},
+		&mockNotificationQueue{})
 
 	cpuNew := 70.0
 
@@ -660,7 +756,7 @@ func TestSystem_UpdateConfig_SaveError(t *testing.T) {
 func TestSystem_GetMetrics_FromCache(t *testing.T) {
 	fakeCache := &FakeMetricsCache{metrics: Metrics{CPUUsage: 50.0}}
 
-	fakeSys := newTestSystem(nil, fakeCache)
+	fakeSys := newTestSystem(nil, fakeCache, &mockNotificationQueue{})
 
 	metrics := fakeSys.GetMetrics()
 
@@ -672,7 +768,7 @@ func TestSystem_GetMetrics_FromCache(t *testing.T) {
 func TestSystem_GetMetrics_CacheMiss(t *testing.T) {
 	fakeCache := &FakeMetricsCache{getErr: ErrCacheMiss}
 
-	fakeSys := newTestSystem(nil, fakeCache)
+	fakeSys := newTestSystem(nil, fakeCache, &mockNotificationQueue{})
 	fakeSys.metrics = Metrics{CPUUsage: 30}
 
 	metrics := fakeSys.GetMetrics()

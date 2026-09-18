@@ -12,6 +12,8 @@ type MetricsCache interface {
 	GetMetrics() (Metrics, error)
 }
 
+// AlertStateStore хранит состояние последовательности
+// одинаковых условий для конкретного типа алерта.
 type AlertStateStore interface {
 	IncrementCount(alertType model.AlertType, condition model.AlertCondition) (int64, error)
 
