@@ -35,7 +35,7 @@ type MockSender struct {
 	sentErr error
 }
 
-func (m *MockSender) Send(notification Notification) error {
+func (m *MockSender) Send(ctx context.Context, notification Notification) error {
 	if m.sentErr != nil {
 		return m.sentErr
 	}
@@ -108,7 +108,7 @@ func TestHttpSender_Send(t *testing.T) {
 
 	sender := NewHttpSender(http.DefaultClient, server.URL)
 
-	err := sender.Send(Notification{})
+	err := sender.Send(context.Background(), Notification{})
 	if err != nil {
 		t.Fatalf("ожидали nil, получили %v", err)
 	}
@@ -131,7 +131,7 @@ func TestHttpSender_Send_TwoRetries(t *testing.T) {
 
 	sender := NewHttpSender(http.DefaultClient, server.URL)
 
-	err := sender.Send(Notification{})
+	err := sender.Send(context.Background(), Notification{})
 	if err != nil {
 		t.Fatalf("ожидали nil, получили %v", err)
 	}
@@ -149,7 +149,7 @@ func TestHttpSender_Send_Error(t *testing.T) {
 
 	sender := NewHttpSender(http.DefaultClient, server.URL)
 
-	err := sender.Send(Notification{})
+	err := sender.Send(context.Background(), Notification{})
 	if err == nil {
 		t.Fatalf("ожидали ошибку, получили %v", err)
 	}
@@ -204,7 +204,7 @@ func TestHttpSender_Send_Post(t *testing.T) {
 
 	sender := NewHttpSender(http.DefaultClient, server.URL)
 
-	err := sender.Send(notification)
+	err := sender.Send(context.Background(), notification)
 	if err != nil {
 		t.Fatalf("ожидали nil, получили %v", err)
 	}

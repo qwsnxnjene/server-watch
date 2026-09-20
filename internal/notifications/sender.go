@@ -1,6 +1,8 @@
 package notifications
 
+import "context"
+
 // Sender определяет отправку уведомлений во внешнюю систему
 type Sender interface {
-	Send(notification Notification) error
+	Send(ctx context.Context, notification Notification) error
 }

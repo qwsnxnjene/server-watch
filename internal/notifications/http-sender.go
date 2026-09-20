@@ -2,6 +2,7 @@ package notifications
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,28 +30,32 @@ type slackPayload struct {
 
 // Send отправляет уведомление через HTTP webhook с повторными попытками
 // для временных ошибок сети и сервера
-func (h *HttpSender) Send(notification Notification) error {
+func (h *HttpSender) Send(ctx context.Context, notification Notification) error {
 	toSend := slackPayload{Text: formatNotification(notification)}
 	data, err := json.Marshal(toSend)
 	if err != nil {
 		return fmt.Errorf("ошибка сериализации уведомления: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, h.url, bytes.NewReader(data))
-	if err != nil {
-		return fmt.Errorf("ошибка создания запроса: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
 	for attempt := range 3 {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.url, bytes.NewReader(data))
+		if err != nil {
+			return fmt.Errorf("ошибка создания запроса: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
 		resp, err := h.client.Do(req)
 		if err != nil {
 			if attempt == 2 {
 				return fmt.Errorf("ошибка запроса: %w", err)
 			}
 
-			time.Sleep(retryDelay(attempt))
-			continue
+			select {
+			case <-time.After(retryDelay(attempt)):
+				continue
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
 
 		switch {
@@ -63,8 +68,12 @@ func (h *HttpSender) Send(notification Notification) error {
 			if attempt == 2 {
 				return fmt.Errorf("ошибка запроса: %d", resp.StatusCode)
 			}
-			time.Sleep(retryDelay(attempt))
-			continue
+			select {
+			case <-time.After(retryDelay(attempt)):
+				continue
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		case resp.StatusCode >= 400 && resp.StatusCode < 500:
 			resp.Body.Close()
 			return fmt.Errorf("сервис для уведомлений вернул HTTP статус %d", resp.StatusCode)

@@ -53,7 +53,7 @@ func (w *Worker) Run(ctx context.Context) {
 		}
 
 		for _, sender := range w.senders {
-			if err := sender.Send(notification); err != nil {
+			if err := sender.Send(ctx, notification); err != nil {
 				slog.Error(
 					"не удалось отправить уведомление",
 					"error", err,

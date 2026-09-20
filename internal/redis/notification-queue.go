@@ -46,7 +46,7 @@ func (r *RedisNotificationQueue) Push(notification notifications.Notification) e
 // Consume извлекает уведомление из Redis-очереди, ожидая его появления ограниченное время.
 // Если очередь пуста, возвращает пустое уведомление без ошибки.
 func (r *RedisNotificationQueue) Consume(ctx context.Context) (notifications.Notification, error) {
-	data, err := r.client.BRPop(ctx, 5*time.Second, r.queueKey()).Result()
+	data, err := r.client.BRPop(ctx, 1*time.Second, r.queueKey()).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return notifications.Notification{}, nil
