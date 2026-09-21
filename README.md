@@ -11,6 +11,8 @@
 ## Что делает скрипт
 
 Скрипт получает текущие значения системных метрик и отображает их в читаемом виде в консоли.
+<img width="453" height="204" alt="image" src="https://github.com/user-attachments/assets/cdaf183e-f565-449d-abc4-5adecf5ff655" />
+
 
 На этом этапе:
 
