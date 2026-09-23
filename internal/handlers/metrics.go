@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	logger2 "server-watch/internal/logger"
 	"strings"
 )
 
@@ -22,7 +23,18 @@ type MetricsResponse struct {
 
 // MetricsHandler обрабатывает запросы к /metrics и возвращает текущие метрики
 func (h *Handler) MetricsHandler(rw http.ResponseWriter, r *http.Request) {
-	slog.Info("получен запрос", "path", "/metrics")
+	requestID, ok := r.Context().Value(requestIDKey).(string)
+	if !ok {
+		slog.Error("request_id отсутствует в context")
+		http.Error(rw, "request_id отсутствует в context", http.StatusInternalServerError)
+		return
+	}
+
+	logger := slog.With("request_id", requestID)
+	ctx := logger2.WithLogger(r.Context(), logger)
+	r = r.WithContext(ctx)
+
+	logger.Info("получен запрос", "path", "/metrics")
 
 	if ok, err := acceptsPrometheus(r); err == nil {
 		if ok {
@@ -30,14 +42,14 @@ func (h *Handler) MetricsHandler(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		slog.Error("не удалось спарсить Accept", "error", err)
+		logger.Error("не удалось спарсить Accept", "error", err)
 		http.Error(rw, "не удалось спарсить Accept", http.StatusInternalServerError)
 		return
 	}
 
 	rw.Header().Set("Content-Type", "application/json")
 
-	metrics := h.system.GetMetrics()
+	metrics := h.system.GetMetrics(r.Context())
 
 	response := MetricsResponse{
 		CPUPercent:  metrics.CPUUsage,
@@ -51,7 +63,7 @@ func (h *Handler) MetricsHandler(rw http.ResponseWriter, r *http.Request) {
 
 	err := json.NewEncoder(rw).Encode(response)
 	if err != nil {
-		slog.Error("не удалось сериализовать метрики", "error", err)
+		logger.Error("не удалось сериализовать метрики", "error", err)
 		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	}

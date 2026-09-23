@@ -74,12 +74,12 @@ func TestRedisMetricsCache_SetGetMetrics(t *testing.T) {
 		Timestamp:  now,
 	}
 
-	err := metricsCache.SetMetrics(metrics)
+	err := metricsCache.SetMetrics(context.Background(), metrics)
 	if err != nil {
 		t.Fatalf("ошибка SetMetrics: %v", err)
 	}
 
-	metricsGot, err := metricsCache.GetMetrics()
+	metricsGot, err := metricsCache.GetMetrics(context.Background())
 	if err != nil {
 		t.Fatalf("ошибка GetMetrics: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestRedisMetricsCache_SetMetrics(t *testing.T) {
 		Timestamp:  now,
 	}
 
-	err := metricsCache.SetMetrics(metrics)
+	err := metricsCache.SetMetrics(context.Background(), metrics)
 	if err != nil {
 		t.Fatalf("ошибка SetMetrics: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestRedisMetricsCache_SetMetrics_TimeStamp(t *testing.T) {
 		Timestamp: now,
 	}
 
-	err := metricsCache.SetMetrics(metrics)
+	err := metricsCache.SetMetrics(context.Background(), metrics)
 	if err != nil {
 		t.Fatalf("ошибка SetMetrics: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestRedisMetricsCache_SetMetrics_TTL(t *testing.T) {
 		CPUUsage: 30.3,
 	}
 
-	err := metricsCache.SetMetrics(metrics)
+	err := metricsCache.SetMetrics(context.Background(), metrics)
 	if err != nil {
 		t.Fatalf("ошибка SetMetrics: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestRedisMetricsCache_GetMetrics_CacheMiss(t *testing.T) {
 
 	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:metrics:")
 
-	_, err := metricsCache.GetMetrics()
+	_, err := metricsCache.GetMetrics(context.Background())
 	if !errors.Is(err, system.ErrCacheMiss) {
 		t.Fatalf("ожидали ошибку %v, получили %v", system.ErrCacheMiss, err)
 	}
@@ -221,7 +221,7 @@ func TestRedisMetricsCache_GetMetrics_InvalidValue(t *testing.T) {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
 
-	_, err = metricsCache.GetMetrics()
+	_, err = metricsCache.GetMetrics(context.Background())
 	if err == nil {
 		t.Fatal("ожидали ошибку, получили nil")
 	}
@@ -261,7 +261,7 @@ func TestRedisMetricsCache_GetMetrics_InvalidTimestamp(t *testing.T) {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
 
-	_, err = metricsCache.GetMetrics()
+	_, err = metricsCache.GetMetrics(context.Background())
 	if err == nil {
 		t.Fatal("ожидали ошибку, получили nil")
 	}
@@ -301,7 +301,7 @@ func TestRedisMetricsCache_GetMetrics_ZeroMemTotal(t *testing.T) {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
 
-	_, err = metricsCache.GetMetrics()
+	_, err = metricsCache.GetMetrics(context.Background())
 	if err == nil {
 		t.Fatal("ожидали ошибку, получили nil")
 	}
@@ -341,7 +341,7 @@ func TestRedisMetricsCache_GetMetrics_ZeroDiskTotal(t *testing.T) {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
 
-	_, err = metricsCache.GetMetrics()
+	_, err = metricsCache.GetMetrics(context.Background())
 	if err == nil {
 		t.Fatal("ожидали ошибку, получили nil")
 	}
@@ -356,7 +356,7 @@ func TestRedisAlertStateStore_IncrementCount(t *testing.T) {
 
 	stateStore := NewRedisAlertStateStore(client, time.Minute, "test:alert:")
 
-	res, err := stateStore.IncrementCount(model.AlertTypeHighCPU, model.ConditionHigh)
+	res, err := stateStore.IncrementCount(context.Background(), model.AlertTypeHighCPU, model.ConditionHigh)
 	if err != nil {
 		t.Fatalf("ошибка инкрементирования счетчика алерта: %v", err)
 	}
@@ -364,7 +364,7 @@ func TestRedisAlertStateStore_IncrementCount(t *testing.T) {
 		t.Fatalf("ожидали значение счетчика = 1, получили %v", res)
 	}
 
-	res, err = stateStore.IncrementCount(model.AlertTypeHighCPU, model.ConditionHigh)
+	res, err = stateStore.IncrementCount(context.Background(), model.AlertTypeHighCPU, model.ConditionHigh)
 	if err != nil {
 		t.Fatalf("ошибка инкрементирования счетчика алерта: %v", err)
 	}
@@ -372,7 +372,7 @@ func TestRedisAlertStateStore_IncrementCount(t *testing.T) {
 		t.Fatalf("ожидали значение счетчика = 2, получили %v", res)
 	}
 
-	res, err = stateStore.IncrementCount(model.AlertTypeHighCPU, model.ConditionNormal)
+	res, err = stateStore.IncrementCount(context.Background(), model.AlertTypeHighCPU, model.ConditionNormal)
 	if err != nil {
 		t.Fatalf("ошибка инкрементирования счетчика алерта: %v", err)
 	}
@@ -380,7 +380,7 @@ func TestRedisAlertStateStore_IncrementCount(t *testing.T) {
 		t.Fatalf("ожидали значение счетчика = 1, получили %v", res)
 	}
 
-	res, err = stateStore.IncrementCount(model.AlertTypeHighCPU, model.ConditionNormal)
+	res, err = stateStore.IncrementCount(context.Background(), model.AlertTypeHighCPU, model.ConditionNormal)
 	if err != nil {
 		t.Fatalf("ошибка инкрементирования счетчика алерта: %v", err)
 	}
@@ -388,7 +388,7 @@ func TestRedisAlertStateStore_IncrementCount(t *testing.T) {
 		t.Fatalf("ожидали значение счетчика = 2, получили %v", res)
 	}
 
-	res, err = stateStore.IncrementCount(model.AlertTypeHighCPU, model.ConditionHigh)
+	res, err = stateStore.IncrementCount(context.Background(), model.AlertTypeHighCPU, model.ConditionHigh)
 	if err != nil {
 		t.Fatalf("ошибка инкрементирования счетчика алерта: %v", err)
 	}
@@ -448,12 +448,12 @@ func TestRedisAlertStateStore_SetActive(t *testing.T) {
 			client := newTestRedis(t)
 			stateStore := NewRedisAlertStateStore(client, time.Minute, "test:alert:")
 
-			err := stateStore.SetActive(model.AlertTypeHighCPU, tt.want)
+			err := stateStore.SetActive(context.Background(), model.AlertTypeHighCPU, tt.want)
 			if err != nil {
 				t.Fatalf("не удалось изменить статус алерта: %v", err)
 			}
 
-			got, err := stateStore.IsActive(model.AlertTypeHighCPU)
+			got, err := stateStore.IsActive(context.Background(), model.AlertTypeHighCPU)
 			if err != nil {
 				t.Fatalf("не удалось прочитать статус алерта: %v", err)
 			}
@@ -478,7 +478,7 @@ func TestRedisAlertStateStore_IsActive_Missing(t *testing.T) {
 	client := newTestRedis(t)
 	stateStore := NewRedisAlertStateStore(client, time.Minute, "test:alert:")
 
-	active, err := stateStore.IsActive(model.AlertTypeHighCPU)
+	active, err := stateStore.IsActive(context.Background(), model.AlertTypeHighCPU)
 	if err != nil {
 		t.Fatalf("ошибка получения статуса алерта: %v", err)
 	}
@@ -491,7 +491,7 @@ func TestRedisAlertStateStore_InvalidAlertType(t *testing.T) {
 	client := newTestRedis(t)
 	stateStore := NewRedisAlertStateStore(client, time.Minute, "test:alert:")
 
-	_, err := stateStore.IncrementCount(model.AlertType("UNKNOWN"), model.ConditionHigh)
+	_, err := stateStore.IncrementCount(context.Background(), model.AlertType("UNKNOWN"), model.ConditionHigh)
 	if err == nil {
 		t.Fatal("ожидали ошибку для неверного типа алерта")
 	}
@@ -502,7 +502,7 @@ func TestRedisAlertStateStore_SetState(t *testing.T) {
 
 	stateStore := NewRedisAlertStateStore(client, time.Minute, "test:alert:")
 
-	err := stateStore.SetState(model.AlertTypeHighCPU, model.AlertState{
+	err := stateStore.SetState(context.Background(), model.AlertTypeHighCPU, model.AlertState{
 		Count:     1,
 		Condition: model.ConditionHigh,
 		Active:    false,
@@ -553,7 +553,7 @@ func TestRedisAlertStateStore_SetState(t *testing.T) {
 		)
 	}
 
-	val, err := stateStore.IncrementCount(model.AlertTypeHighCPU, model.ConditionHigh)
+	val, err := stateStore.IncrementCount(context.Background(), model.AlertTypeHighCPU, model.ConditionHigh)
 	if err != nil {
 		t.Fatalf("не удалось увеличить счетчик алерта: %v", err)
 	}
@@ -577,7 +577,7 @@ func TestRedisNotificationQueue_Push(t *testing.T) {
 		Timestamp: now,
 	}
 
-	err := queue.Push(notification)
+	err := queue.Push(context.Background(), notification)
 	if err != nil {
 		t.Fatalf("ошибка Push: %v", err)
 	}
@@ -629,7 +629,7 @@ func TestRedisNotificationQueue_Consume(t *testing.T) {
 		Timestamp: now,
 	}
 
-	err := queue.Push(notification)
+	err := queue.Push(context.Background(), notification)
 	if err != nil {
 		t.Fatalf("ошибка Push: %v", err)
 	}

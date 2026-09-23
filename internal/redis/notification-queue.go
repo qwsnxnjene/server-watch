@@ -30,13 +30,13 @@ func (r *RedisNotificationQueue) queueKey() string {
 }
 
 // Push добавляет уведомление в Redis-очередь
-func (r *RedisNotificationQueue) Push(notification notifications.Notification) error {
+func (r *RedisNotificationQueue) Push(ctx context.Context, notification notifications.Notification) error {
 	data, err := json.Marshal(notification)
 	if err != nil {
 		return fmt.Errorf("не удалось сериализовать уведомление: %w", err)
 	}
 
-	if err := r.client.RPush(context.Background(), r.queueKey(), string(data)).Err(); err != nil {
+	if err := r.client.RPush(ctx, r.queueKey(), string(data)).Err(); err != nil {
 		return fmt.Errorf("не удалось добавить уведомление в очередь Redis: %w", err)
 	}
 
@@ -46,7 +46,7 @@ func (r *RedisNotificationQueue) Push(notification notifications.Notification) e
 // Consume извлекает уведомление из Redis-очереди, ожидая его появления ограниченное время.
 // Если очередь пуста, возвращает пустое уведомление без ошибки.
 func (r *RedisNotificationQueue) Consume(ctx context.Context) (notifications.Notification, error) {
-	data, err := r.client.BRPop(ctx, 5*time.Second, r.queueKey()).Result()
+	data, err := r.client.BRPop(ctx, 1*time.Second, r.queueKey()).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return notifications.Notification{}, nil

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"server-watch/internal/config"
 	"server-watch/internal/system"
@@ -11,9 +12,9 @@ import (
 // System определяет интерфейс бизнес-логики,
 // необходимый HTTP-обработчикам
 type System interface {
-	GetMetrics() system.Metrics
-	GetHistory(from, to time.Time) ([]system.Metrics, error)
-	GetAlerts(activeOnly bool) ([]model.Alert, error)
+	GetMetrics(ctx context.Context) system.Metrics
+	GetHistory(ctx context.Context, from, to time.Time) ([]system.Metrics, error)
+	GetAlerts(ctx context.Context, activeOnly bool) ([]model.Alert, error)
 	GetHealth() (time.Time, error)
 
 	UpdateConfig(updatedCfg system.ConfigUpdate) error

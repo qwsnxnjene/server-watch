@@ -29,7 +29,13 @@ func StartRedisHealthCheck(ctx context.Context, client *redis.Client, interval t
 	for {
 		select {
 		case <-ticker.C:
-			if err := client.Ping(ctx).Err(); err != nil {
+			pingCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+
+			err := client.Ping(pingCtx).Err()
+
+			cancel()
+
+			if err != nil {
 				slog.Warn("redis недоступен", "error", err)
 				continue
 			}

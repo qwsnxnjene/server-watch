@@ -28,33 +28,33 @@ func NewRedisMetricsCache(client *redis.Client, ttl time.Duration, prefix string
 }
 
 // SetMetrics сохраняет текущие системные метрики в Redis
-func (r *RedisMetricsCache) SetMetrics(metrics system.Metrics) error {
-	err := r.setMetric(r.prefix+"cpu", fmt.Sprintf("%.2f", metrics.CPUUsage))
+func (r *RedisMetricsCache) SetMetrics(ctx context.Context, metrics system.Metrics) error {
+	err := r.setMetric(ctx, r.prefix+"cpu", fmt.Sprintf("%.2f", metrics.CPUUsage))
 	if err != nil {
 		return err
 	}
 
-	err = r.setMetric(r.prefix+"mem_used", fmt.Sprintf("%.2f", metrics.MemUsedMB))
+	err = r.setMetric(ctx, r.prefix+"mem_used", fmt.Sprintf("%.2f", metrics.MemUsedMB))
 	if err != nil {
 		return err
 	}
 
-	err = r.setMetric(r.prefix+"mem_total", fmt.Sprintf("%.2f", metrics.MemTotalMB))
+	err = r.setMetric(ctx, r.prefix+"mem_total", fmt.Sprintf("%.2f", metrics.MemTotalMB))
 	if err != nil {
 		return err
 	}
 
-	err = r.setMetric(r.prefix+"disk_used", fmt.Sprintf("%.2f", metrics.DiskUsed))
+	err = r.setMetric(ctx, r.prefix+"disk_used", fmt.Sprintf("%.2f", metrics.DiskUsed))
 	if err != nil {
 		return err
 	}
 
-	err = r.setMetric(r.prefix+"disk_total", fmt.Sprintf("%.2f", metrics.DiskTotal))
+	err = r.setMetric(ctx, r.prefix+"disk_total", fmt.Sprintf("%.2f", metrics.DiskTotal))
 	if err != nil {
 		return err
 	}
 
-	err = r.setMetric(r.prefix+"timestamp", metrics.Timestamp.Format(time.RFC3339))
+	err = r.setMetric(ctx, r.prefix+"timestamp", metrics.Timestamp.Format(time.RFC3339))
 	if err != nil {
 		return err
 	}
@@ -62,8 +62,8 @@ func (r *RedisMetricsCache) SetMetrics(metrics system.Metrics) error {
 	return nil
 }
 
-func (r *RedisMetricsCache) setMetric(key, value string) error {
-	_, err := r.client.Set(context.Background(),
+func (r *RedisMetricsCache) setMetric(ctx context.Context, key, value string) error {
+	_, err := r.client.Set(ctx,
 		key,
 		value,
 		r.ttl).Result()
@@ -75,40 +75,40 @@ func (r *RedisMetricsCache) setMetric(key, value string) error {
 }
 
 // GetMetrics загружает метрики из Redis и рассчитывает производные показатели использования памяти и диска
-func (r *RedisMetricsCache) GetMetrics() (system.Metrics, error) {
+func (r *RedisMetricsCache) GetMetrics(ctx context.Context) (system.Metrics, error) {
 	metricsToReturn := system.Metrics{}
 
-	cpuUsage, err := r.getFloatMetric(r.prefix + "cpu")
+	cpuUsage, err := r.getFloatMetric(ctx, r.prefix+"cpu")
 	if err != nil {
 		return system.Metrics{}, err
 	}
 	metricsToReturn.CPUUsage = cpuUsage
 
-	memUsed, err := r.getFloatMetric(r.prefix + "mem_used")
+	memUsed, err := r.getFloatMetric(ctx, r.prefix+"mem_used")
 	if err != nil {
 		return system.Metrics{}, err
 	}
 	metricsToReturn.MemUsedMB = memUsed
 
-	memTotal, err := r.getFloatMetric(r.prefix + "mem_total")
+	memTotal, err := r.getFloatMetric(ctx, r.prefix+"mem_total")
 	if err != nil {
 		return system.Metrics{}, err
 	}
 	metricsToReturn.MemTotalMB = memTotal
 
-	diskUsed, err := r.getFloatMetric(r.prefix + "disk_used")
+	diskUsed, err := r.getFloatMetric(ctx, r.prefix+"disk_used")
 	if err != nil {
 		return system.Metrics{}, err
 	}
 	metricsToReturn.DiskUsed = diskUsed
 
-	diskTotal, err := r.getFloatMetric(r.prefix + "disk_total")
+	diskTotal, err := r.getFloatMetric(ctx, r.prefix+"disk_total")
 	if err != nil {
 		return system.Metrics{}, err
 	}
 	metricsToReturn.DiskTotal = diskTotal
 
-	ts, err := r.client.Get(context.Background(), r.prefix+"timestamp").Result()
+	ts, err := r.client.Get(ctx, r.prefix+"timestamp").Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return system.Metrics{}, system.ErrCacheMiss
@@ -136,8 +136,8 @@ func (r *RedisMetricsCache) GetMetrics() (system.Metrics, error) {
 	return metricsToReturn, nil
 }
 
-func (r *RedisMetricsCache) getFloatMetric(key string) (float64, error) {
-	metric, err := r.client.Get(context.Background(), key).Result()
+func (r *RedisMetricsCache) getFloatMetric(ctx context.Context, key string) (float64, error) {
+	metric, err := r.client.Get(ctx, key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return 0, system.ErrCacheMiss

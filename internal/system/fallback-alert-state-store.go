@@ -1,6 +1,7 @@
 package system
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"server-watch/internal/system/model"
@@ -27,12 +28,12 @@ func NewFallbackAlertStateStore(mem, redis AlertStateBackend) *FallbackAlertStat
 // IncrementCount увеличивает счётчик состояния через Redis,
 // а при его недоступности использует in-memory хранилище.
 // После восстановления Redis данные синхронизируются перед продолжением работы
-func (f *FallbackAlertStateStore) IncrementCount(alertType model.AlertType, condition model.AlertCondition) (int64, error) {
+func (f *FallbackAlertStateStore) IncrementCount(ctx context.Context, alertType model.AlertType, condition model.AlertCondition) (int64, error) {
 	var redisErr error
 
 	// Если Redis ранее падал - сначала пытаемся восстановить
 	if f.redisFailed {
-		if err := f.resyncAll(); err == nil {
+		if err := f.resyncAll(ctx); err == nil {
 			f.redisFailed = false
 			slog.Info("соединение с Redis восстановлено, данные синхронизированы")
 		} else {
@@ -45,7 +46,7 @@ func (f *FallbackAlertStateStore) IncrementCount(alertType model.AlertType, cond
 	// Если Redis восстановлен или раньше не падал
 	// пробуем выполнить обычную операцию
 	if !f.redisFailed {
-		redisValue, err := f.redis.IncrementCount(alertType, condition)
+		redisValue, err := f.redis.IncrementCount(ctx, alertType, condition)
 		if err == nil {
 			return redisValue, nil
 		}
@@ -55,7 +56,7 @@ func (f *FallbackAlertStateStore) IncrementCount(alertType model.AlertType, cond
 	}
 
 	// Redis недоступен, тогда fallback на in-memory
-	memoryValue, memoryErr := f.memory.IncrementCount(alertType, condition)
+	memoryValue, memoryErr := f.memory.IncrementCount(ctx, alertType, condition)
 	if memoryErr != nil {
 		return 0, fmt.Errorf(
 			"ошибка redis: %v; ошибка in-memory: %w",
@@ -69,13 +70,13 @@ func (f *FallbackAlertStateStore) IncrementCount(alertType model.AlertType, cond
 
 // IsActive возвращает статус алерта, используя Redis или in-memory fallback
 // при недоступности Redis
-func (f *FallbackAlertStateStore) IsActive(alertType model.AlertType) (bool, error) {
-	redisActive, redisErr := f.redis.IsActive(alertType)
+func (f *FallbackAlertStateStore) IsActive(ctx context.Context, alertType model.AlertType) (bool, error) {
+	redisActive, redisErr := f.redis.IsActive(ctx, alertType)
 	if redisErr == nil {
 		return redisActive, nil
 	}
 
-	memActive, memErr := f.memory.IsActive(alertType)
+	memActive, memErr := f.memory.IsActive(ctx, alertType)
 	if memErr != nil {
 		return false, fmt.Errorf(
 			"ошибка redis: %v; ошибка in-memory: %w",
@@ -89,16 +90,16 @@ func (f *FallbackAlertStateStore) IsActive(alertType model.AlertType) (bool, err
 
 // SetActive устанавливает статус алерта в Redis или in-memory fallback,
 // если Redis недоступен
-func (f *FallbackAlertStateStore) SetActive(alertType model.AlertType, active bool) error {
+func (f *FallbackAlertStateStore) SetActive(ctx context.Context, alertType model.AlertType, active bool) error {
 	if f.redisFailed {
-		if err := f.resyncAll(); err == nil {
+		if err := f.resyncAll(ctx); err == nil {
 			f.redisFailed = false
 			slog.Info("соединение с Redis восстановлено, данные синхронизированы")
 		} else {
 			slog.Info("не удалось синхронизировать данные с Redis, продолжаем работу с in-memory",
 				"error", err)
 
-			memErr := f.memory.SetActive(alertType, active)
+			memErr := f.memory.SetActive(ctx, alertType, active)
 			if memErr != nil {
 				return fmt.Errorf(
 					"ошибка синхронизации redis: %v; ошибка in-memory: %w",
@@ -111,14 +112,14 @@ func (f *FallbackAlertStateStore) SetActive(alertType model.AlertType, active bo
 		}
 	}
 
-	redisErr := f.redis.SetActive(alertType, active)
+	redisErr := f.redis.SetActive(ctx, alertType, active)
 	if redisErr == nil {
 		return nil
 	}
 
 	f.redisFailed = true
 
-	memErr := f.memory.SetActive(alertType, active)
+	memErr := f.memory.SetActive(ctx, alertType, active)
 	if memErr != nil {
 		return fmt.Errorf(
 			"ошибка redis: %v; ошибка in-memory: %w",
@@ -132,15 +133,15 @@ func (f *FallbackAlertStateStore) SetActive(alertType model.AlertType, active bo
 
 // resyncAll переносит состояния всех поддерживаемых типов алертов
 // из in-memory хранилища обратно в Redis
-func (f *FallbackAlertStateStore) resyncAll() error {
+func (f *FallbackAlertStateStore) resyncAll(ctx context.Context) error {
 	for _, alertType := range []model.AlertType{model.AlertTypeHighMem, model.AlertTypeHighCPU} {
 
-		state, err := f.memory.GetState(alertType)
+		state, err := f.memory.GetState(ctx, alertType)
 		if err != nil {
 			return fmt.Errorf("не удалось получить состояние из in-memory: %w", err)
 		}
 
-		err = f.redis.SetState(alertType, state)
+		err = f.redis.SetState(ctx, alertType, state)
 		if err != nil {
 			return fmt.Errorf("не удалось установить состояние в redis: %w", err)
 		}

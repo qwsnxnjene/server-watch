@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 )
 
 type FakeSystem struct {
@@ -34,11 +36,11 @@ type FakeSystem struct {
 	lastConfigUpdate system.ConfigUpdate
 }
 
-func (f *FakeSystem) GetMetrics() system.Metrics {
+func (f *FakeSystem) GetMetrics(ctx context.Context) system.Metrics {
 	return f.metrics
 }
 
-func (f *FakeSystem) GetHistory(from, to time.Time) ([]system.Metrics, error) {
+func (f *FakeSystem) GetHistory(ctx context.Context, from, to time.Time) ([]system.Metrics, error) {
 	f.historyFrom = from
 	f.historyTo = to
 
@@ -49,7 +51,7 @@ func (f *FakeSystem) GetHistory(from, to time.Time) ([]system.Metrics, error) {
 	return f.history, nil
 }
 
-func (f *FakeSystem) GetAlerts(activeOnly bool) ([]model.Alert, error) {
+func (f *FakeSystem) GetAlerts(ctx context.Context, activeOnly bool) ([]model.Alert, error) {
 	f.alertsActiveOnly = activeOnly
 
 	if f.alertsErr != nil {
@@ -704,5 +706,53 @@ func TestHandler_ConfigHandler_Invalid(t *testing.T) {
 				t.Fatalf("ожидали код ответа %v, получили %v", tt.wantCode, rw.Code)
 			}
 		})
+	}
+}
+
+func TestRequestIDMiddleware(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Request-ID", "test-123")
+	rec := httptest.NewRecorder()
+
+	handler := RequestIDMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Context().Value(requestIDKey)
+		if id != "test-123" {
+			t.Fatalf("ожидали id запроса = test-123, получили %v", id)
+		}
+	}))
+
+	handler.ServeHTTP(rec, req)
+
+	if got := rec.Header().Get("X-Request-ID"); got != "test-123" {
+		t.Fatalf("ожидали X-Request-ID = test-123, получили %q", got)
+	}
+}
+
+func TestRequestIDMiddleware_NoID(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	handler := RequestIDMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, ok := r.Context().Value(requestIDKey).(string)
+		if !ok {
+			t.Fatal("request_id отсутствует в context")
+		}
+
+		_, err := uuid.Parse(id)
+		if err != nil {
+			t.Fatalf("ошибка парсинга UUID: %v", err)
+		}
+	}))
+
+	handler.ServeHTTP(rec, req)
+
+	responseID := rec.Header().Get("X-Request-ID")
+
+	if responseID == "" {
+		t.Fatal("X-Request-ID отсутствует в response")
+	}
+
+	if _, err := uuid.Parse(responseID); err != nil {
+		t.Fatalf("X-Request-ID содержит невалидный UUID: %v", err)
 	}
 }

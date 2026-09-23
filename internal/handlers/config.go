@@ -11,7 +11,16 @@ import (
 
 // ConfigHandler обрабатывает запросы к /config и обновляет конфигурацию сервиса
 func (h *Handler) ConfigHandler(rw http.ResponseWriter, r *http.Request) {
-	slog.Info("получен запрос", "path", "/config")
+	requestID, ok := r.Context().Value(requestIDKey).(string)
+	if !ok {
+		slog.Error("request_id отсутствует в context")
+		http.Error(rw, "request_id отсутствует в context", http.StatusInternalServerError)
+		return
+	}
+
+	logger := slog.With("request_id", requestID)
+
+	logger.Info("получен запрос", "path", "/config")
 
 	var updatedCfg system.ConfigUpdate
 
