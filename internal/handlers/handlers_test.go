@@ -100,6 +100,13 @@ func TestHandler_MetricsHandler(t *testing.T) {
 	req.Header.Set("Accept", "application/json")
 	rw := httptest.NewRecorder()
 
+	ctx := context.WithValue(
+		req.Context(),
+		requestIDKey,
+		"test-request-id",
+	)
+	req = req.WithContext(ctx)
+
 	handler.MetricsHandler(rw, req)
 
 	if rw.Code != http.StatusOK {
@@ -239,6 +246,14 @@ func TestHandler_HealthHandler(t *testing.T) {
 			handler := NewHandler(fakeSystem, prometheusHandler)
 
 			req := httptest.NewRequest(http.MethodGet, "/health", nil)
+
+			ctx := context.WithValue(
+				req.Context(),
+				requestIDKey,
+				"test-request-id",
+			)
+			req = req.WithContext(ctx)
+
 			rw := httptest.NewRecorder()
 
 			handler.HealthHandler(rw, req)
@@ -290,6 +305,14 @@ func TestHandler_HistoryHandler_JSON(t *testing.T) {
 	handler := NewHandler(fakeSystem, prometheusHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/history"+query, nil)
+
+	ctx := context.WithValue(
+		req.Context(),
+		requestIDKey,
+		"test-request-id",
+	)
+	req = req.WithContext(ctx)
+
 	rw := httptest.NewRecorder()
 
 	handler.HistoryHandler(rw, req)
@@ -385,6 +408,14 @@ func TestHandler_HistoryHandler_QueryParams(t *testing.T) {
 			handler := NewHandler(fakeSystem, prometheusHandler)
 
 			req := httptest.NewRequest(http.MethodGet, "/history"+tt.query, nil)
+
+			ctx := context.WithValue(
+				req.Context(),
+				requestIDKey,
+				"test-request-id",
+			)
+			req = req.WithContext(ctx)
+
 			rw := httptest.NewRecorder()
 
 			before := time.Now().UTC().Truncate(time.Second)
@@ -500,6 +531,14 @@ func TestHandler_AlertsHandler_QueryParam(t *testing.T) {
 			handler := NewHandler(fakeSystem, prometheusHandler)
 
 			req := httptest.NewRequest(http.MethodGet, "/alerts"+tt.query, nil)
+
+			ctx := context.WithValue(
+				req.Context(),
+				requestIDKey,
+				"test-request-id",
+			)
+			req = req.WithContext(ctx)
+
 			rw := httptest.NewRecorder()
 
 			handler.AlertsHandler(rw, req)
@@ -578,6 +617,14 @@ func TestHandler_AlertsHandler_JSON(t *testing.T) {
 	handler := NewHandler(fakeSystem, prometheusHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/alerts?active_only=true", nil)
+
+	ctx := context.WithValue(
+		req.Context(),
+		requestIDKey,
+		"test-request-id",
+	)
+	req = req.WithContext(ctx)
+
 	rw := httptest.NewRecorder()
 
 	handler.AlertsHandler(rw, req)
@@ -611,6 +658,14 @@ func TestHandler_AlertsHandler_GetAlertsError(t *testing.T) {
 	handler := NewHandler(fakeSystem, prometheusHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/alerts", nil)
+
+	ctx := context.WithValue(
+		req.Context(),
+		requestIDKey,
+		"test-request-id",
+	)
+	req = req.WithContext(ctx)
+
 	rw := httptest.NewRecorder()
 
 	handler.AlertsHandler(rw, req)
@@ -641,6 +696,14 @@ func TestHandler_ConfigHandler_Correct(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost,
 		"/config",
 		strings.NewReader(`{"cpu_threshold":45}`))
+
+	ctx := context.WithValue(
+		req.Context(),
+		requestIDKey,
+		"test-request-id",
+	)
+	req = req.WithContext(ctx)
+
 	rw := httptest.NewRecorder()
 
 	handler.ConfigHandler(rw, req)
@@ -699,6 +762,14 @@ func TestHandler_ConfigHandler_Invalid(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost,
 				"/config",
 				strings.NewReader(tt.data))
+
+			ctx := context.WithValue(
+				req.Context(),
+				requestIDKey,
+				"test-request-id",
+			)
+			req = req.WithContext(ctx)
+
 			rw := httptest.NewRecorder()
 
 			handler.ConfigHandler(rw, req)
