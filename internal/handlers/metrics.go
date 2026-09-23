@@ -37,7 +37,7 @@ func (h *Handler) MetricsHandler(rw http.ResponseWriter, r *http.Request) {
 
 	rw.Header().Set("Content-Type", "application/json")
 
-	metrics := h.system.GetMetrics()
+	metrics := h.system.GetMetrics(r.Context())
 
 	response := MetricsResponse{
 		CPUPercent:  metrics.CPUUsage,

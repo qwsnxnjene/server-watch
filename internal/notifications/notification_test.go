@@ -18,7 +18,7 @@ type MockQueue struct {
 	consumeCount int
 }
 
-func (m *MockQueue) Push(notification Notification) error {
+func (m *MockQueue) Push(ctx context.Context, notification Notification) error {
 	return nil
 }
 

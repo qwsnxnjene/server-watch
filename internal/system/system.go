@@ -1,6 +1,7 @@
 package system
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"server-watch/internal/config"
@@ -58,7 +59,7 @@ func NewSystem(
 
 // CollectMetrics собирает системные метрики, сохраняет их,
 // обновляет состояние алертов и передаёт уведомления в очередь
-func (s *System) CollectMetrics() error {
+func (s *System) CollectMetrics(ctx context.Context) error {
 	usage, err := data.GetCPUUsage()
 	if err != nil {
 		errToReturn := fmt.Errorf("не удалось получить данные о загрузке CPU: %w", err)
@@ -102,7 +103,7 @@ func (s *System) CollectMetrics() error {
 		Timestamp:  now,
 	}
 
-	if err := s.repository.SaveMetrics(metrics); err != nil {
+	if err := s.repository.SaveMetrics(ctx, metrics); err != nil {
 		errToReturn := fmt.Errorf("не удалось сохранить метрики в БД: %w", err)
 		s.mu.Lock()
 		s.lastError = errToReturn
@@ -119,7 +120,7 @@ func (s *System) CollectMetrics() error {
 
 	updatePrometheusMetrics(metrics)
 
-	update, err := s.updateAlerts(metrics)
+	update, err := s.updateAlerts(ctx, metrics)
 	if err != nil {
 		errToReturn := fmt.Errorf("не удалось обновить состояния алертов: %w", err)
 		s.mu.Lock()
@@ -128,7 +129,7 @@ func (s *System) CollectMetrics() error {
 		return errToReturn
 	}
 
-	err = s.processAlerts(metrics, update)
+	err = s.processAlerts(ctx, metrics, update)
 	if err != nil {
 		errToReturn := fmt.Errorf("не удалось обработать алерты: %w", err)
 		s.mu.Lock()
@@ -138,7 +139,7 @@ func (s *System) CollectMetrics() error {
 	}
 
 	if s.cache != nil {
-		err = s.cache.SetMetrics(metrics)
+		err = s.cache.SetMetrics(ctx, metrics)
 		if err != nil {
 			slog.Warn("не удалось сохранить метрики в кэш", "error", err)
 		}
@@ -151,8 +152,8 @@ func (s *System) CollectMetrics() error {
 
 // GetAlerts возвращает список алертов.
 // При activeOnly == true возвращаются только активные алерты
-func (s *System) GetAlerts(activeOnly bool) ([]model.Alert, error) {
-	alerts, err := s.repository.GetAlerts(activeOnly)
+func (s *System) GetAlerts(ctx context.Context, activeOnly bool) ([]model.Alert, error) {
+	alerts, err := s.repository.GetAlerts(ctx, activeOnly)
 	if err != nil {
 		return nil, fmt.Errorf("не удалось получить список алертов: %w", err)
 	}
@@ -161,7 +162,7 @@ func (s *System) GetAlerts(activeOnly bool) ([]model.Alert, error) {
 }
 
 // updateAlerts обновляет последовательные состояния алертов для CPU и памяти
-func (s *System) updateAlerts(metrics Metrics) (model.AlertUpdate, error) {
+func (s *System) updateAlerts(ctx context.Context, metrics Metrics) (model.AlertUpdate, error) {
 	if metrics.CPUUsage > HighCPUThreshold {
 		slog.Warn(
 			"превышен порог CPU",
@@ -189,6 +190,7 @@ func (s *System) updateAlerts(metrics Metrics) (model.AlertUpdate, error) {
 	}
 
 	count, err := s.alertState.IncrementCount(
+		ctx,
 		model.AlertTypeHighCPU,
 		condition,
 	)
@@ -205,6 +207,7 @@ func (s *System) updateAlerts(metrics Metrics) (model.AlertUpdate, error) {
 	}
 
 	count, err = s.alertState.IncrementCount(
+		ctx,
 		model.AlertTypeHighMem,
 		condition,
 	)
@@ -219,16 +222,16 @@ func (s *System) updateAlerts(metrics Metrics) (model.AlertUpdate, error) {
 
 // processAlerts создаёт или разрешает алерты после достижения
 // необходимого количества последовательных измерений
-func (s *System) processAlerts(metrics Metrics, update model.AlertUpdate) error {
+func (s *System) processAlerts(ctx context.Context, metrics Metrics, update model.AlertUpdate) error {
 	if update.CPUCondition == model.ConditionHigh && update.CPUCount >= AlertTriggerCount {
-		err := s.createAlertIfNeeded(model.AlertTypeHighCPU, metrics.CPUUsage, HighCPUThreshold)
+		err := s.createAlertIfNeeded(ctx, model.AlertTypeHighCPU, metrics.CPUUsage, HighCPUThreshold)
 		if err != nil {
 			return fmt.Errorf("не удалось обработать алерт: %w", err)
 		}
 	}
 
 	if update.CPUCondition == model.ConditionNormal && update.CPUCount >= AlertResolveCount {
-		err := s.resolveAlertIfNeeded(model.AlertTypeHighCPU, metrics.CPUUsage, HighCPUThreshold)
+		err := s.resolveAlertIfNeeded(ctx, model.AlertTypeHighCPU, metrics.CPUUsage, HighCPUThreshold)
 		if err != nil {
 			return fmt.Errorf("не удалось обработать алерт: %w", err)
 		}
@@ -236,14 +239,14 @@ func (s *System) processAlerts(metrics Metrics, update model.AlertUpdate) error 
 
 	//с памятью точно также
 	if update.MemCondition == model.ConditionHigh && update.MemCount >= AlertTriggerCount {
-		err := s.createAlertIfNeeded(model.AlertTypeHighMem, metrics.MemUsage, HighMemThreshold)
+		err := s.createAlertIfNeeded(ctx, model.AlertTypeHighMem, metrics.MemUsage, HighMemThreshold)
 		if err != nil {
 			return fmt.Errorf("не удалось обработать алерт: %w", err)
 		}
 	}
 
 	if update.MemCondition == model.ConditionNormal && update.MemCount >= AlertResolveCount {
-		err := s.resolveAlertIfNeeded(model.AlertTypeHighMem, metrics.MemUsage, HighMemThreshold)
+		err := s.resolveAlertIfNeeded(ctx, model.AlertTypeHighMem, metrics.MemUsage, HighMemThreshold)
 		if err != nil {
 			return fmt.Errorf("не удалось обработать алерт: %w", err)
 		}
@@ -254,8 +257,8 @@ func (s *System) processAlerts(metrics Metrics, update model.AlertUpdate) error 
 
 // createAlertIfNeeded создаёт алерт, если для указанного типа
 // ещё нет активного алерта
-func (s *System) createAlertIfNeeded(alertType model.AlertType, value float64, threshold float64) error {
-	alert, err := s.repository.GetActiveAlert(alertType)
+func (s *System) createAlertIfNeeded(ctx context.Context, alertType model.AlertType, value float64, threshold float64) error {
+	alert, err := s.repository.GetActiveAlert(ctx, alertType)
 	if err != nil {
 		return fmt.Errorf("не удалось получить активный алерт типа %v: %w", alertType, err)
 	}
@@ -271,7 +274,7 @@ func (s *System) createAlertIfNeeded(alertType model.AlertType, value float64, t
 			Value:      value,
 		}
 
-		_, err = s.repository.SaveAlert(alertToSave)
+		_, err = s.repository.SaveAlert(ctx, alertToSave)
 		if err != nil {
 			return fmt.Errorf("не удалось сохранить новый алерт типа %v: %w", alertType, err)
 		}
@@ -290,7 +293,7 @@ func (s *System) createAlertIfNeeded(alertType model.AlertType, value float64, t
 			Threshold: threshold,
 			Timestamp: now,
 		}
-		err = s.notificationQueue.Push(notification)
+		err = s.notificationQueue.Push(ctx, notification)
 		if err != nil {
 			slog.Error(
 				"не удалось поставить уведомление в очередь",
@@ -305,13 +308,13 @@ func (s *System) createAlertIfNeeded(alertType model.AlertType, value float64, t
 
 // resolveAlertIfNeeded разрешает активный алерт указанного типа,
 // если он существует
-func (s *System) resolveAlertIfNeeded(alertType model.AlertType, value float64, threshold float64) error {
-	alert, err := s.repository.GetActiveAlert(alertType)
+func (s *System) resolveAlertIfNeeded(ctx context.Context, alertType model.AlertType, value float64, threshold float64) error {
+	alert, err := s.repository.GetActiveAlert(ctx, alertType)
 	if err != nil {
 		return fmt.Errorf("не удалось получить активный алерт типа %v: %w", alertType, err)
 	}
 	if alert != nil {
-		err = s.repository.ResolveAlert(alert.ID, time.Now())
+		err = s.repository.ResolveAlert(ctx, alert.ID, time.Now())
 		if err != nil {
 			return fmt.Errorf("не удалось зарезолвить алерт типа %v: %w", alertType, err)
 		}
@@ -327,7 +330,7 @@ func (s *System) resolveAlertIfNeeded(alertType model.AlertType, value float64, 
 			Threshold: threshold,
 			Timestamp: time.Now(),
 		}
-		err = s.notificationQueue.Push(notification)
+		err = s.notificationQueue.Push(ctx, notification)
 		if err != nil {
 			slog.Error(
 				"не удалось поставить уведомление в очередь",

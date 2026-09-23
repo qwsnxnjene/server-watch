@@ -1,6 +1,7 @@
 package system
 
 import (
+	"context"
 	"errors"
 	"server-watch/internal/system/model"
 )
@@ -10,24 +11,24 @@ var ErrCacheMiss = errors.New("метрики отсутствуют в кэше
 
 // MetricsCache определяет операции сохранения и получения системных метрик из кэша
 type MetricsCache interface {
-	SetMetrics(metrics Metrics) error
-	GetMetrics() (Metrics, error)
+	SetMetrics(ctx context.Context, metrics Metrics) error
+	GetMetrics(ctx context.Context) (Metrics, error)
 }
 
 // AlertStateStore управляет счётчиком последовательных условий
 // и активностью алертов.
 type AlertStateStore interface {
-	IncrementCount(alertType model.AlertType, condition model.AlertCondition) (int64, error)
+	IncrementCount(ctx context.Context, alertType model.AlertType, condition model.AlertCondition) (int64, error)
 
-	IsActive(alertType model.AlertType) (bool, error)
-	SetActive(alertType model.AlertType, active bool) error
+	IsActive(ctx context.Context, alertType model.AlertType) (bool, error)
+	SetActive(ctx context.Context, alertType model.AlertType, active bool) error
 }
 
 // AlertStateSnapshotStore определяет операции чтения и сохранения
 // полного состояния алерта
 type AlertStateSnapshotStore interface {
-	GetState(alertType model.AlertType) (model.AlertState, error)
-	SetState(alertType model.AlertType, state model.AlertState) error
+	GetState(ctx context.Context, alertType model.AlertType) (model.AlertState, error)
+	SetState(ctx context.Context, alertType model.AlertType, state model.AlertState) error
 }
 
 // AlertStateBackend объединяет операции над текущим состоянием алерта

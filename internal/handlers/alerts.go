@@ -45,7 +45,7 @@ func (h *Handler) AlertsHandler(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	alerts, err := h.system.GetAlerts(parsedActiveOnly)
+	alerts, err := h.system.GetAlerts(r.Context(), parsedActiveOnly)
 	if err != nil {
 		slog.Error("не удалось получить алерты", "error", err)
 		http.Error(rw, "ошибка получения списка алертов", http.StatusInternalServerError)

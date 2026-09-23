@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"server-watch/internal/system"
 	"server-watch/internal/system/model"
@@ -45,7 +46,7 @@ func TestSQLiteRepository_SaveMetrics(t *testing.T) {
 		Timestamp:  time.Now().UTC(),
 	}
 
-	err := repo.SaveMetrics(metrics)
+	err := repo.SaveMetrics(context.Background(), metrics)
 	if err != nil {
 		t.Fatalf("не удалось сохранить метрики: %v", err)
 	}
@@ -53,7 +54,7 @@ func TestSQLiteRepository_SaveMetrics(t *testing.T) {
 	from := metrics.Timestamp.Add(-time.Minute)
 	to := metrics.Timestamp.Add(time.Minute)
 
-	metricsGot, err := repo.GetMetrics(from, to)
+	metricsGot, err := repo.GetMetrics(context.Background(), from, to)
 	if err != nil {
 		t.Fatalf("не удалось получить сохраненные метрики из базы данных: %v", err)
 	}
@@ -112,13 +113,13 @@ func TestSQLiteRepository_SaveAlert(t *testing.T) {
 		Value:      23.2,
 	}
 
-	id, err := repo.SaveAlert(alert)
+	id, err := repo.SaveAlert(context.Background(), alert)
 	if err != nil {
 		t.Fatalf("не удалось сохранить алерт в базу данных: %v", err)
 	}
 	alert.ID = id
 
-	alertGot, err := repo.GetActiveAlert(model.AlertTypeHighCPU)
+	alertGot, err := repo.GetActiveAlert(context.Background(), model.AlertTypeHighCPU)
 	if err != nil {
 		t.Fatalf("не удалось получить алерт из базы данных: %v", err)
 	}
@@ -159,13 +160,13 @@ func TestSQLiteRepository_ResolveAlert(t *testing.T) {
 		Value:      23.2,
 	}
 
-	id, err := repo.SaveAlert(alert)
+	id, err := repo.SaveAlert(context.Background(), alert)
 	if err != nil {
 		t.Fatalf("не удалось сохранить алерт в базу данных: %v", err)
 	}
 	alert.ID = id
 
-	alertGot, err := repo.GetActiveAlert(model.AlertTypeHighCPU)
+	alertGot, err := repo.GetActiveAlert(context.Background(), model.AlertTypeHighCPU)
 	if err != nil {
 		t.Fatalf("не удалось получить сохраненный алерт из базы данных: %v", err)
 	}
@@ -173,12 +174,12 @@ func TestSQLiteRepository_ResolveAlert(t *testing.T) {
 		t.Fatal("сохраненный алерт не найден")
 	}
 
-	err = repo.ResolveAlert(id, time.Now())
+	err = repo.ResolveAlert(context.Background(), id, time.Now())
 	if err != nil {
 		t.Fatalf("не удалось зарезолвить алерт: %v", err)
 	}
 
-	alertGot, err = repo.GetActiveAlert(model.AlertTypeHighCPU)
+	alertGot, err = repo.GetActiveAlert(context.Background(), model.AlertTypeHighCPU)
 	if err != nil {
 		t.Fatalf("не удалось получить алерт из базы данных: %v", err)
 	}
@@ -210,26 +211,26 @@ func TestSQLiteRepository_GetAlerts(t *testing.T) {
 	}
 
 	//сохраняем оба алерта в базу данных
-	id1, err := repo.SaveAlert(alert1)
+	id1, err := repo.SaveAlert(context.Background(), alert1)
 	if err != nil {
 		t.Fatalf("не удалось сохранить алерт в базу данных: %v", err)
 	}
 	alert1.ID = id1
 
-	id2, err := repo.SaveAlert(alert2)
+	id2, err := repo.SaveAlert(context.Background(), alert2)
 	if err != nil {
 		t.Fatalf("не удалось сохранить алерт в базу данных: %v", err)
 	}
 	alert2.ID = id2
 
 	//отмечаем один из алертов как завершенный
-	err = repo.ResolveAlert(id1, time.Now())
+	err = repo.ResolveAlert(context.Background(), id1, time.Now())
 	if err != nil {
 		t.Fatalf("не удалось зарезолвить алерт: %v", err)
 	}
 
 	//получаем все алерты
-	alertsGot, err := repo.GetAlerts(false)
+	alertsGot, err := repo.GetAlerts(context.Background(), false)
 	if err != nil {
 		t.Fatalf("не удалось получить все сохраненные алерты: %v", err)
 	}
@@ -242,7 +243,7 @@ func TestSQLiteRepository_GetAlerts(t *testing.T) {
 	}
 
 	//получаем только активные алерты
-	activeAlertsGot, err := repo.GetAlerts(true)
+	activeAlertsGot, err := repo.GetAlerts(context.Background(), true)
 	if err != nil {
 		t.Fatalf("не удалось получить активные сохраненные алерты: %v", err)
 	}
@@ -288,12 +289,12 @@ func TestSQLiteRepository_GetMetrics(t *testing.T) {
 		Timestamp:  now.Add(-5 * time.Minute),
 	}
 
-	err := repo.SaveMetrics(metrics1)
+	err := repo.SaveMetrics(context.Background(), metrics1)
 	if err != nil {
 		t.Fatalf("не удалось сохранить метрику: %v", err)
 	}
 
-	err = repo.SaveMetrics(metrics2)
+	err = repo.SaveMetrics(context.Background(), metrics2)
 	if err != nil {
 		t.Fatalf("не удалось сохранить метрику: %v", err)
 	}
@@ -301,7 +302,7 @@ func TestSQLiteRepository_GetMetrics(t *testing.T) {
 	from := now.Add(-7 * time.Minute)
 	to := now
 
-	metrics, err := repo.GetMetrics(from, to)
+	metrics, err := repo.GetMetrics(context.Background(), from, to)
 	if err != nil {
 		t.Fatalf("не удалось получить сохраненные метрики: %v", err)
 	}
@@ -348,12 +349,12 @@ func TestSQLiteRepository_GetMetrics_IncludesBoundaries(t *testing.T) {
 		Timestamp:  now.Add(-5 * time.Minute),
 	}
 
-	err := repo.SaveMetrics(metrics1)
+	err := repo.SaveMetrics(context.Background(), metrics1)
 	if err != nil {
 		t.Fatalf("не удалось сохранить метрику: %v", err)
 	}
 
-	err = repo.SaveMetrics(metrics2)
+	err = repo.SaveMetrics(context.Background(), metrics2)
 	if err != nil {
 		t.Fatalf("не удалось сохранить метрику: %v", err)
 	}
@@ -361,7 +362,7 @@ func TestSQLiteRepository_GetMetrics_IncludesBoundaries(t *testing.T) {
 	from := now.Add(-5 * time.Minute)
 	to := now
 
-	metrics, err := repo.GetMetrics(from, to)
+	metrics, err := repo.GetMetrics(context.Background(), from, to)
 	if err != nil {
 		t.Fatalf("не удалось получить сохраненные метрики: %v", err)
 	}

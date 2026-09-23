@@ -43,7 +43,7 @@ func (r *RedisAlertStateStore) alertKey(alertType model.AlertType, suffix string
 
 // IncrementCount увеличивает счётчик при сохранении условия
 // или сбрасывает его при изменении условия
-func (r *RedisAlertStateStore) IncrementCount(alertType model.AlertType, condition model.AlertCondition) (int64, error) {
+func (r *RedisAlertStateStore) IncrementCount(ctx context.Context, alertType model.AlertType, condition model.AlertCondition) (int64, error) {
 	keyCond, err := r.alertKey(alertType, "condition")
 	if err != nil {
 		return 0, err
@@ -54,22 +54,22 @@ func (r *RedisAlertStateStore) IncrementCount(alertType model.AlertType, conditi
 		return 0, err
 	}
 
-	cond, err := r.client.Get(context.Background(), keyCond).Result()
+	cond, err := r.client.Get(ctx, keyCond).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return 0, fmt.Errorf("не удалось получить состояние: %w", err)
 	}
 
 	if cond == string(condition) {
 		// состояния совпадают - просто увеличиваем счетчик алерта
-		res, err := r.client.Incr(context.Background(), keyCount).Result()
+		res, err := r.client.Incr(ctx, keyCount).Result()
 		if err != nil {
 			return 0, fmt.Errorf("не удалось инкрементировать счетчик алерта: %w", err)
 		}
-		err = r.client.Expire(context.Background(), keyCount, r.ttl).Err()
+		err = r.client.Expire(ctx, keyCount, r.ttl).Err()
 		if err != nil {
 			return 0, fmt.Errorf("не удалось установить TTL у счетчика алерта: %w", err)
 		}
-		err = r.client.Expire(context.Background(), keyCond, r.ttl).Err()
+		err = r.client.Expire(ctx, keyCond, r.ttl).Err()
 		if err != nil {
 			return 0, fmt.Errorf("не удалось установить TTL у состояния счетчика: %w", err)
 		}
@@ -77,11 +77,11 @@ func (r *RedisAlertStateStore) IncrementCount(alertType model.AlertType, conditi
 		return res, nil
 	} else {
 		// состояния разные - устанавливаем новое состояние и обновляем счетчик алерта
-		err = r.client.Set(context.Background(), keyCond, string(condition), r.ttl).Err()
+		err = r.client.Set(ctx, keyCond, string(condition), r.ttl).Err()
 		if err != nil {
 			return 0, fmt.Errorf("не удалось установить новое состояние: %w", err)
 		}
-		_, err := r.client.Set(context.Background(), keyCount, 1, r.ttl).Result()
+		_, err := r.client.Set(ctx, keyCount, 1, r.ttl).Result()
 		if err != nil {
 			return 0, fmt.Errorf("не удалось установить значение счетчика алерта: %w", err)
 		}
@@ -91,13 +91,13 @@ func (r *RedisAlertStateStore) IncrementCount(alertType model.AlertType, conditi
 }
 
 // IsActive проверяет, активен ли алерт заданного типа
-func (r *RedisAlertStateStore) IsActive(alertType model.AlertType) (bool, error) {
+func (r *RedisAlertStateStore) IsActive(ctx context.Context, alertType model.AlertType) (bool, error) {
 	key, err := r.alertKey(alertType, "active")
 	if err != nil {
 		return false, err
 	}
 
-	res, err := r.client.Get(context.Background(), key).Result()
+	res, err := r.client.Get(ctx, key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return false, nil
@@ -113,7 +113,7 @@ func (r *RedisAlertStateStore) IsActive(alertType model.AlertType) (bool, error)
 }
 
 // SetActive устанавливает статус алерта заданного типа
-func (r *RedisAlertStateStore) SetActive(alertType model.AlertType, active bool) error {
+func (r *RedisAlertStateStore) SetActive(ctx context.Context, alertType model.AlertType, active bool) error {
 	key, err := r.alertKey(alertType, "active")
 	if err != nil {
 		return err
@@ -124,7 +124,7 @@ func (r *RedisAlertStateStore) SetActive(alertType model.AlertType, active bool)
 		value = 1
 	}
 
-	err = r.client.Set(context.Background(), key, value, 0).Err()
+	err = r.client.Set(ctx, key, value, 0).Err()
 	if err != nil {
 		return fmt.Errorf("не удалось поменять статус алерта: %w", err)
 	}
@@ -133,7 +133,7 @@ func (r *RedisAlertStateStore) SetActive(alertType model.AlertType, active bool)
 }
 
 // SetState атомарно сохраняет полное состояние алерта в Redis
-func (r *RedisAlertStateStore) SetState(alertType model.AlertType, state model.AlertState) error {
+func (r *RedisAlertStateStore) SetState(ctx context.Context, alertType model.AlertType, state model.AlertState) error {
 	keyCond, err := r.alertKey(alertType, "condition")
 	if err != nil {
 		return err
@@ -155,7 +155,7 @@ func (r *RedisAlertStateStore) SetState(alertType model.AlertType, state model.A
 	}
 
 	err = r.client.Eval(
-		context.Background(),
+		ctx,
 		setStateScript,
 		[]string{keyCond, keyCount, keyActive},
 		string(state.Condition),
@@ -170,6 +170,6 @@ func (r *RedisAlertStateStore) SetState(alertType model.AlertType, state model.A
 	return nil
 }
 
-func (r *RedisAlertStateStore) GetState(alertType model.AlertType) (model.AlertState, error) {
+func (r *RedisAlertStateStore) GetState(ctx context.Context, alertType model.AlertType) (model.AlertState, error) {
 	return model.AlertState{}, nil
 }

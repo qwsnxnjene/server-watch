@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -22,8 +23,11 @@ func NewSQLiteRepository(db *sql.DB) *SQLiteRepository {
 }
 
 // SaveMetrics сохраняет измерение системных метрик в SQLite
-func (s *SQLiteRepository) SaveMetrics(metrics system.Metrics) error {
-	_, err := s.db.Exec(`
+func (s *SQLiteRepository) SaveMetrics(ctx context.Context, metrics system.Metrics) error {
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+
+	_, err := s.db.ExecContext(ctx, `
     INSERT INTO metrics (
         ts,
         cpu,
@@ -56,8 +60,11 @@ func (s *SQLiteRepository) SaveMetrics(metrics system.Metrics) error {
 }
 
 // SaveAlert сохраняет алерт в SQLite и возвращает его идентификатор
-func (s *SQLiteRepository) SaveAlert(alert model.Alert) (int64, error) {
-	res, err := s.db.Exec(`
+func (s *SQLiteRepository) SaveAlert(ctx context.Context, alert model.Alert) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+
+	res, err := s.db.ExecContext(ctx, `
 	INSERT INTO alerts (
 	    ts,
 	    type,
@@ -95,8 +102,11 @@ func (s *SQLiteRepository) SaveAlert(alert model.Alert) (int64, error) {
 }
 
 // GetMetrics возвращает измерения метрик за указанный временной диапазон
-func (s *SQLiteRepository) GetMetrics(from time.Time, to time.Time) ([]system.Metrics, error) {
-	rows, err := s.db.Query(`
+func (s *SQLiteRepository) GetMetrics(ctx context.Context, from, to time.Time) ([]system.Metrics, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+
+	rows, err := s.db.QueryContext(ctx, `
 	SELECT ts, cpu, mem_used_mb, mem_total_mb, disk_used_gb, disk_total_gb
 	FROM metrics
 	WHERE ts BETWEEN :from AND :to
@@ -147,7 +157,10 @@ func (s *SQLiteRepository) GetMetrics(from time.Time, to time.Time) ([]system.Me
 
 // GetAlerts возвращает сохранённые алерты.
 // При activeOnly == true возвращаются только активные алерты
-func (s *SQLiteRepository) GetAlerts(activeOnly bool) ([]model.Alert, error) {
+func (s *SQLiteRepository) GetAlerts(ctx context.Context, activeOnly bool) ([]model.Alert, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+
 	query := `
 	SELECT id, ts, type, threshold, value, resolved, resolved_ts
 	FROM alerts
@@ -157,7 +170,7 @@ func (s *SQLiteRepository) GetAlerts(activeOnly bool) ([]model.Alert, error) {
 		query += ` WHERE resolved = FALSE`
 	}
 
-	rows, err := s.db.Query(query)
+	rows, err := s.db.QueryContext(ctx, query)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -209,8 +222,11 @@ func (s *SQLiteRepository) GetAlerts(activeOnly bool) ([]model.Alert, error) {
 }
 
 // ResolveAlert помечает алерт как разрешённый и сохраняет время разрешения
-func (s *SQLiteRepository) ResolveAlert(id int64, resolvedAt time.Time) error {
-	_, err := s.db.Exec(`
+func (s *SQLiteRepository) ResolveAlert(ctx context.Context, id int64, resolvedAt time.Time) error {
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+
+	_, err := s.db.ExecContext(ctx, `
 	UPDATE alerts
 	SET resolved = TRUE, resolved_ts = :resolvedTs
 	WHERE id = :id
@@ -227,8 +243,11 @@ func (s *SQLiteRepository) ResolveAlert(id int64, resolvedAt time.Time) error {
 
 // GetActiveAlert возвращает активный алерт указанного типа.
 // Если активного алерта нет, возвращается nil без ошибки
-func (s *SQLiteRepository) GetActiveAlert(alertType model.AlertType) (*model.Alert, error) {
-	row := s.db.QueryRow(`
+func (s *SQLiteRepository) GetActiveAlert(ctx context.Context, alertType model.AlertType) (*model.Alert, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+
+	row := s.db.QueryRowContext(ctx, `
 	SELECT id, ts, type, threshold, value, resolved, resolved_ts
 	FROM alerts
 	WHERE type = :type AND resolved = FALSE

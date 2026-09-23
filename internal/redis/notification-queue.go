@@ -30,13 +30,13 @@ func (r *RedisNotificationQueue) queueKey() string {
 }
 
 // Push добавляет уведомление в Redis-очередь
-func (r *RedisNotificationQueue) Push(notification notifications.Notification) error {
+func (r *RedisNotificationQueue) Push(ctx context.Context, notification notifications.Notification) error {
 	data, err := json.Marshal(notification)
 	if err != nil {
 		return fmt.Errorf("не удалось сериализовать уведомление: %w", err)
 	}
 
-	if err := r.client.RPush(context.Background(), r.queueKey(), string(data)).Err(); err != nil {
+	if err := r.client.RPush(ctx, r.queueKey(), string(data)).Err(); err != nil {
 		return fmt.Errorf("не удалось добавить уведомление в очередь Redis: %w", err)
 	}
 

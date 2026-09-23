@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -34,11 +35,11 @@ type FakeSystem struct {
 	lastConfigUpdate system.ConfigUpdate
 }
 
-func (f *FakeSystem) GetMetrics() system.Metrics {
+func (f *FakeSystem) GetMetrics(ctx context.Context) system.Metrics {
 	return f.metrics
 }
 
-func (f *FakeSystem) GetHistory(from, to time.Time) ([]system.Metrics, error) {
+func (f *FakeSystem) GetHistory(ctx context.Context, from, to time.Time) ([]system.Metrics, error) {
 	f.historyFrom = from
 	f.historyTo = to
 
@@ -49,7 +50,7 @@ func (f *FakeSystem) GetHistory(from, to time.Time) ([]system.Metrics, error) {
 	return f.history, nil
 }
 
-func (f *FakeSystem) GetAlerts(activeOnly bool) ([]model.Alert, error) {
+func (f *FakeSystem) GetAlerts(ctx context.Context, activeOnly bool) ([]model.Alert, error) {
 	f.alertsActiveOnly = activeOnly
 
 	if f.alertsErr != nil {

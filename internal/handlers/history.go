@@ -44,7 +44,7 @@ func (h *Handler) HistoryHandler(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	metrics, err := h.system.GetHistory(parsedFrom, parsedTo)
+	metrics, err := h.system.GetHistory(r.Context(), parsedFrom, parsedTo)
 	if err != nil {
 		slog.Error("ошибка получения истории измерения метрик", "error", err)
 		http.Error(rw, "не удалось получить историю измерения метрик", http.StatusInternalServerError)

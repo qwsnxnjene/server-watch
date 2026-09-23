@@ -87,7 +87,7 @@ func main() {
 	}()
 
 	sys := system.NewSystem(repo, alertStateStore, cfg, "config.yaml", cache, notificationQueue)
-	err = sys.CollectMetrics()
+	err = sys.CollectMetrics(ctx)
 	if err != nil {
 		slog.Error("не удалось прочитать метрики при запуске", "error", err)
 		os.Exit(1)
@@ -158,7 +158,7 @@ func startMetricsCollector(ctx context.Context, sys *system.System, wg *sync.Wai
 		for {
 			select {
 			case <-ticker.C:
-				err := sys.CollectMetrics()
+				err := sys.CollectMetrics(ctx)
 				if err != nil {
 					errCh <- err
 					return

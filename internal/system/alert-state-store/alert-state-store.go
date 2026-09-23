@@ -1,6 +1,7 @@
 package alert_state_store
 
 import (
+	"context"
 	"errors"
 	"server-watch/internal/system/model"
 	"sync"
@@ -26,7 +27,7 @@ func validAlertType(alertType model.AlertType) bool {
 
 // IncrementCount увеличивает счётчик для указанного типа и условия.
 // При изменении условия счётчик начинается заново с единицы
-func (i *InMemoryAlertStateStore) IncrementCount(alertType model.AlertType, condition model.AlertCondition) (int64, error) {
+func (i *InMemoryAlertStateStore) IncrementCount(ctx context.Context, alertType model.AlertType, condition model.AlertCondition) (int64, error) {
 	if !validAlertType(alertType) {
 		return 0, errors.New("некорректный тип алерта")
 	}
@@ -57,7 +58,7 @@ func (i *InMemoryAlertStateStore) IncrementCount(alertType model.AlertType, cond
 }
 
 // IsActive возвращает текущий статус алерта указанного типа
-func (i *InMemoryAlertStateStore) IsActive(alertType model.AlertType) (bool, error) {
+func (i *InMemoryAlertStateStore) IsActive(ctx context.Context, alertType model.AlertType) (bool, error) {
 	if !validAlertType(alertType) {
 		return false, errors.New("некорректный тип алерта")
 	}
@@ -73,7 +74,7 @@ func (i *InMemoryAlertStateStore) IsActive(alertType model.AlertType) (bool, err
 }
 
 // SetActive устанавливает статус алерта указанного типа
-func (i *InMemoryAlertStateStore) SetActive(alertType model.AlertType, active bool) error {
+func (i *InMemoryAlertStateStore) SetActive(ctx context.Context, alertType model.AlertType, active bool) error {
 	if !validAlertType(alertType) {
 		return errors.New("некорректный тип алерта")
 	}
@@ -95,7 +96,7 @@ func (i *InMemoryAlertStateStore) SetActive(alertType model.AlertType, active bo
 
 // GetState возвращает полное состояние алерта указанного типа.
 // Если состояние ещё не сохранено, возвращается его нулевое значение без ошибки
-func (i *InMemoryAlertStateStore) GetState(alertType model.AlertType) (model.AlertState, error) {
+func (i *InMemoryAlertStateStore) GetState(ctx context.Context, alertType model.AlertType) (model.AlertState, error) {
 	if !validAlertType(alertType) {
 		return model.AlertState{}, errors.New("некорректный тип алерта")
 	}
@@ -110,6 +111,6 @@ func (i *InMemoryAlertStateStore) GetState(alertType model.AlertType) (model.Ale
 	return model.AlertState{}, nil
 }
 
-func (i *InMemoryAlertStateStore) SetState(alertType model.AlertType, state model.AlertState) error {
+func (i *InMemoryAlertStateStore) SetState(ctx context.Context, alertType model.AlertType, state model.AlertState) error {
 	return nil
 }
