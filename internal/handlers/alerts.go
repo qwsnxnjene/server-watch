@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	logger2 "server-watch/internal/logger"
 	"server-watch/internal/system/model"
 	"time"
 )
@@ -27,7 +28,18 @@ type AlertsResponse struct {
 // AlertsHandler обрабатывает запросы к /alerts и возвращает список алертов.
 // Параметр active_only ограничивает результат только активными алертами.
 func (h *Handler) AlertsHandler(rw http.ResponseWriter, r *http.Request) {
-	slog.Info("получен запрос", "path", "/alerts")
+	requestID, ok := r.Context().Value(requestIDKey).(string)
+	if !ok {
+		slog.Error("request_id отсутствует в context")
+		http.Error(rw, "request_id отсутствует в context", http.StatusInternalServerError)
+		return
+	}
+
+	logger := slog.With("request_id", requestID)
+	ctx := logger2.WithLogger(r.Context(), logger)
+	r = r.WithContext(ctx)
+
+	logger.Info("получен запрос", "path", "/alerts")
 
 	activeOnly := r.URL.Query().Get("active_only")
 	if activeOnly == "" {
@@ -40,14 +52,14 @@ func (h *Handler) AlertsHandler(rw http.ResponseWriter, r *http.Request) {
 	} else if activeOnly == "false" {
 		parsedActiveOnly = false
 	} else {
-		slog.Warn("некорректное значение параметра active_only", "active_only", activeOnly)
+		logger.Warn("некорректное значение параметра active_only", "active_only", activeOnly)
 		http.Error(rw, "некорректное значение параметра active_only", http.StatusBadRequest)
 		return
 	}
 
 	alerts, err := h.system.GetAlerts(r.Context(), parsedActiveOnly)
 	if err != nil {
-		slog.Error("не удалось получить алерты", "error", err)
+		logger.Error("не удалось получить алерты", "error", err)
 		http.Error(rw, "ошибка получения списка алертов", http.StatusInternalServerError)
 		return
 	}
@@ -72,7 +84,7 @@ func (h *Handler) AlertsHandler(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(rw).Encode(response)
 	if err != nil {
-		slog.Error("не удалось сериализовать список алертов", "error", err)
+		logger.Error("не удалось сериализовать список алертов", "error", err)
 		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	}

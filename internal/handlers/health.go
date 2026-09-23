@@ -17,14 +17,23 @@ type HealthResponse struct {
 
 // HealthHandler обрабатывает запросы к /health и возвращает состояние сервиса
 func (h *Handler) HealthHandler(rw http.ResponseWriter, r *http.Request) {
-	slog.Info("получен запрос", "path", "/health")
+	requestID, ok := r.Context().Value(requestIDKey).(string)
+	if !ok {
+		slog.Error("request_id отсутствует в context")
+		http.Error(rw, "request_id отсутствует в context", http.StatusInternalServerError)
+		return
+	}
+
+	logger := slog.With("request_id", requestID)
+
+	logger.Info("получен запрос", "path", "/health")
 
 	rw.Header().Set("Content-Type", "application/json")
 
 	lastSuccess, lastError := h.system.GetHealth()
 
 	if lastSuccess.IsZero() {
-		slog.Error("при запросе по /health ещё нет успешных чтений метрик")
+		logger.Error("при запросе по /health ещё нет успешных чтений метрик")
 		rw.WriteHeader(http.StatusServiceUnavailable)
 
 		response := HealthResponse{
@@ -34,14 +43,14 @@ func (h *Handler) HealthHandler(rw http.ResponseWriter, r *http.Request) {
 
 		err := json.NewEncoder(rw).Encode(response)
 		if err != nil {
-			slog.Error("не удалось записать ответ в JSON", "error", err)
+			logger.Error("не удалось записать ответ в JSON", "error", err)
 		}
 
 		return
 	}
 
 	if lastError != nil {
-		slog.Error("ошибка при чтении метрик", "error", lastError)
+		logger.Error("ошибка при чтении метрик", "error", lastError)
 		rw.WriteHeader(http.StatusServiceUnavailable)
 
 		response := HealthResponse{
@@ -51,13 +60,13 @@ func (h *Handler) HealthHandler(rw http.ResponseWriter, r *http.Request) {
 
 		err := json.NewEncoder(rw).Encode(response)
 		if err != nil {
-			slog.Error("не удалось записать ответ в JSON", "error", err)
+			logger.Error("не удалось записать ответ в JSON", "error", err)
 		}
 		return
 	}
 
 	if time.Since(lastSuccess) > time.Second*10 {
-		slog.Error("последнее обновление данных случилось дольше 10 секунд назад")
+		logger.Error("последнее обновление данных случилось дольше 10 секунд назад")
 		rw.WriteHeader(http.StatusServiceUnavailable)
 
 		response := HealthResponse{
@@ -67,7 +76,7 @@ func (h *Handler) HealthHandler(rw http.ResponseWriter, r *http.Request) {
 
 		err := json.NewEncoder(rw).Encode(response)
 		if err != nil {
-			slog.Error("не удалось записать ответ в JSON", "error", err)
+			logger.Error("не удалось записать ответ в JSON", "error", err)
 		}
 
 		return
@@ -79,6 +88,6 @@ func (h *Handler) HealthHandler(rw http.ResponseWriter, r *http.Request) {
 	}
 	err := json.NewEncoder(rw).Encode(response)
 	if err != nil {
-		slog.Error("не удалось записать ответ в JSON", "error", err)
+		logger.Error("не удалось записать ответ в JSON", "error", err)
 	}
 }

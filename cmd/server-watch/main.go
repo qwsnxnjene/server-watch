@@ -138,7 +138,7 @@ func newHTTPServer(sys *system.System, promHandler *http.Handler) *http.Server {
 
 	return &http.Server{
 		Addr:    "localhost:8080",
-		Handler: mux,
+		Handler: handlers.RequestIDMiddleware(mux),
 	}
 }
 

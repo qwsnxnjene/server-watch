@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"server-watch/internal/logger"
 	"time"
 )
 
@@ -22,12 +23,17 @@ type Metrics struct {
 
 // GetMetrics возвращает копию актуальных метрик
 func (s *System) GetMetrics(ctx context.Context) Metrics {
+	loggerFromContext, ok := logger.FromContext(ctx)
+	if !ok {
+		loggerFromContext = slog.Default()
+	}
+
 	if s.cache != nil {
 		if metrics, err := s.cache.GetMetrics(ctx); err == nil {
 			return metrics
 		} else {
 			if !errors.Is(err, context.Canceled) {
-				slog.Warn("не удалось получить метрики из кэша", "error", err)
+				loggerFromContext.Warn("не удалось получить метрики из кэша", "error", err)
 			}
 		}
 	}
