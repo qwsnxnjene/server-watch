@@ -6,23 +6,12 @@ import (
 	"fmt"
 	"log/slog"
 	"server-watch/internal/logger"
+	"server-watch/internal/system/model"
 	"time"
 )
 
-// Metrics содержит значения системных метрик и дату проведенного замера
-type Metrics struct {
-	CPUUsage   float64
-	MemUsage   float64
-	MemUsedMB  float64
-	MemTotalMB float64
-	DiskUsage  float64
-	DiskUsed   float64
-	DiskTotal  float64
-	Timestamp  time.Time
-}
-
 // GetMetrics возвращает копию актуальных метрик
-func (s *System) GetMetrics(ctx context.Context) Metrics {
+func (s *System) GetMetrics(ctx context.Context) model.Metrics {
 	loggerFromContext, ok := logger.FromContext(ctx)
 	if !ok {
 		loggerFromContext = slog.Default()
@@ -45,7 +34,7 @@ func (s *System) GetMetrics(ctx context.Context) Metrics {
 }
 
 // GetHistory возвращает историю измерений метрик в заданных временных рамках
-func (s *System) GetHistory(ctx context.Context, from, to time.Time) ([]Metrics, error) {
+func (s *System) GetHistory(ctx context.Context, from, to time.Time) ([]model.Metrics, error) {
 	metrics, err := s.repository.GetMetrics(ctx, from, to)
 	if err != nil {
 		return nil, fmt.Errorf("не удалось получить список измерений метрик: %w", err)

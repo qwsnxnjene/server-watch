@@ -1,11 +1,21 @@
-package system
+package prometheus
 
 import (
 	"fmt"
 	"net/http"
+	"server-watch/internal/system/model"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+var HTTPLatency = prometheus.NewHistogramVec(
+	prometheus.HistogramOpts{
+		Name:    "http_request_duration_seconds",
+		Help:    "Время обработки HTTP-запросов",
+		Buckets: prometheus.ExponentialBuckets(0.0001, 2, 13),
+	},
+	[]string{"path", "method", "status"},
 )
 
 var cpuPercent = prometheus.NewGauge(prometheus.GaugeOpts{
@@ -33,12 +43,12 @@ var diskTotalGb = prometheus.NewGauge(prometheus.GaugeOpts{
 	Help: "Общее количество всего места на диске в ГБ",
 })
 
-var alertsActiveTotal = prometheus.NewGauge(prometheus.GaugeOpts{
+var AlertsActiveTotal = prometheus.NewGauge(prometheus.GaugeOpts{
 	Name: "alerts_active_total",
 	Help: "Количество активных алертов на данный момент",
 })
 
-var alertsTotal = prometheus.NewCounter(prometheus.CounterOpts{
+var AlertsTotal = prometheus.NewCounter(prometheus.CounterOpts{
 	Name: "alerts_total",
 	Help: "Общее количество алертов с момента запуска сервиса",
 })
@@ -72,20 +82,25 @@ func RegisterPrometheusMetrics() error {
 		return fmt.Errorf("не удалось зарегистрировать в Prometheus метрику disk_total_gb: %w", err)
 	}
 
-	err = registry.Register(alertsActiveTotal)
+	err = registry.Register(AlertsActiveTotal)
 	if err != nil {
 		return fmt.Errorf("не удалось зарегистрировать в Prometheus метрику alerts_active_total: %w", err)
 	}
 
-	err = registry.Register(alertsTotal)
+	err = registry.Register(AlertsTotal)
 	if err != nil {
 		return fmt.Errorf("не удалось зарегистрировать в Prometheus метрику alerts_total: %w", err)
+	}
+
+	err = registry.Register(HTTPLatency)
+	if err != nil {
+		return fmt.Errorf("не удалось зарегистрировать HTTP latency: %w", err)
 	}
 
 	return nil
 }
 
-func updatePrometheusMetrics(metrics Metrics) {
+func UpdatePrometheusMetrics(metrics model.Metrics) {
 	cpuPercent.Set(metrics.CPUUsage)
 	memUsedMb.Set(metrics.MemUsedMB)
 	memTotalMb.Set(metrics.MemTotalMB)

@@ -11,6 +11,7 @@ import (
 	"server-watch/internal/config"
 	"server-watch/internal/handlers"
 	"server-watch/internal/notifications"
+	"server-watch/internal/prometheus"
 	redis2 "server-watch/internal/redis"
 	"server-watch/internal/storage"
 	"server-watch/internal/system"
@@ -52,7 +53,7 @@ func main() {
 	)
 
 	client := redis2.NewClient()
-	cache := redis2.NewRedisMetricsCache(client, 30*time.Second, "server-watch:metrics:")
+	cache := redis2.NewRedisMetricsCache(client, 30*time.Second, "server-watch:prometheus:")
 	go redis2.StartRedisHealthCheck(ctx, client, 10*time.Second)
 
 	// Redis используется как основное хранилище состояния алертов.
@@ -93,11 +94,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = system.RegisterPrometheusMetrics(); err != nil {
+	if err = prometheus.RegisterPrometheusMetrics(); err != nil {
 		slog.Error("не удалось зарегистрировать метрики Prometheus", "error", err)
 		os.Exit(1)
 	}
-	promHandler := system.PrometheusHandler()
+	promHandler := prometheus.PrometheusHandler()
 
 	metricsErrCh := startMetricsCollector(ctx, sys, &wg)
 
@@ -131,10 +132,19 @@ func newHTTPServer(sys *system.System, promHandler *http.Handler) *http.Server {
 	handler := handlers.NewHandler(sys, *promHandler)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/metrics", handler.MetricsHandler)
-	mux.HandleFunc("/health", handler.HealthHandler)
-	mux.HandleFunc("/history", handler.HistoryHandler)
-	mux.HandleFunc("/alerts", handler.AlertsHandler)
+	mux.Handle("/metrics", handlers.MetricsMiddleware(
+		http.HandlerFunc(handler.MetricsHandler),
+	))
+	mux.Handle("/health",
+		handlers.MetricsMiddleware(
+			http.HandlerFunc(handler.HealthHandler),
+		))
+	mux.Handle("/history", handlers.MetricsMiddleware(
+		http.HandlerFunc(handler.HistoryHandler),
+	))
+	mux.Handle("/alerts", handlers.MetricsMiddleware(
+		http.HandlerFunc(handler.AlertsHandler),
+	))
 
 	return &http.Server{
 		Addr:    "localhost:8080",

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"server-watch/internal/system"
 	"server-watch/internal/system/model"
 	"time"
 )
@@ -23,7 +22,7 @@ func NewSQLiteRepository(db *sql.DB) *SQLiteRepository {
 }
 
 // SaveMetrics сохраняет измерение системных метрик в SQLite
-func (s *SQLiteRepository) SaveMetrics(ctx context.Context, metrics system.Metrics) error {
+func (s *SQLiteRepository) SaveMetrics(ctx context.Context, metrics model.Metrics) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
@@ -102,7 +101,7 @@ func (s *SQLiteRepository) SaveAlert(ctx context.Context, alert model.Alert) (in
 }
 
 // GetMetrics возвращает измерения метрик за указанный временной диапазон
-func (s *SQLiteRepository) GetMetrics(ctx context.Context, from, to time.Time) ([]system.Metrics, error) {
+func (s *SQLiteRepository) GetMetrics(ctx context.Context, from, to time.Time) ([]model.Metrics, error) {
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
@@ -122,7 +121,7 @@ func (s *SQLiteRepository) GetMetrics(ctx context.Context, from, to time.Time) (
 	}
 	defer rows.Close()
 
-	var metrics []system.Metrics
+	var metrics []model.Metrics
 
 	for rows.Next() {
 		var ts time.Time
@@ -133,7 +132,7 @@ func (s *SQLiteRepository) GetMetrics(ctx context.Context, from, to time.Time) (
 			return nil, fmt.Errorf("не удалось прочитать метрику из базы данных SQLite: %w", err)
 		}
 
-		currMetrics := system.Metrics{
+		currMetrics := model.Metrics{
 			Timestamp:  ts,
 			CPUUsage:   cpu,
 			MemUsedMB:  memUsedMb,

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"server-watch/internal/config"
 	"server-watch/internal/notifications"
+	"server-watch/internal/prometheus"
 	"server-watch/internal/system/data"
 	"server-watch/internal/system/model"
 	"sync"
@@ -25,7 +26,7 @@ const (
 // System реализует бизнес-логику мониторинга системных метрик и алертов
 type System struct {
 	mu          sync.RWMutex
-	metrics     Metrics
+	metrics     model.Metrics
 	lastSuccess time.Time
 	lastError   error
 	repository  Repository
@@ -92,7 +93,7 @@ func (s *System) CollectMetrics(ctx context.Context) error {
 
 	now := time.Now()
 
-	metrics := Metrics{
+	metrics := model.Metrics{
 		CPUUsage:   usage,
 		MemUsage:   memUsage,
 		MemUsedMB:  usedMem,
@@ -118,7 +119,7 @@ func (s *System) CollectMetrics(ctx context.Context) error {
 	s.lastSuccess = metrics.Timestamp
 	s.mu.Unlock()
 
-	updatePrometheusMetrics(metrics)
+	prometheus.UpdatePrometheusMetrics(metrics)
 
 	update, err := s.updateAlerts(ctx, metrics)
 	if err != nil {
@@ -162,7 +163,7 @@ func (s *System) GetAlerts(ctx context.Context, activeOnly bool) ([]model.Alert,
 }
 
 // updateAlerts обновляет последовательные состояния алертов для CPU и памяти
-func (s *System) updateAlerts(ctx context.Context, metrics Metrics) (model.AlertUpdate, error) {
+func (s *System) updateAlerts(ctx context.Context, metrics model.Metrics) (model.AlertUpdate, error) {
 	if metrics.CPUUsage > HighCPUThreshold {
 		slog.Warn(
 			"превышен порог CPU",
@@ -222,7 +223,7 @@ func (s *System) updateAlerts(ctx context.Context, metrics Metrics) (model.Alert
 
 // processAlerts создаёт или разрешает алерты после достижения
 // необходимого количества последовательных измерений
-func (s *System) processAlerts(ctx context.Context, metrics Metrics, update model.AlertUpdate) error {
+func (s *System) processAlerts(ctx context.Context, metrics model.Metrics, update model.AlertUpdate) error {
 	if update.CPUCondition == model.ConditionHigh && update.CPUCount >= AlertTriggerCount {
 		err := s.createAlertIfNeeded(ctx, model.AlertTypeHighCPU, metrics.CPUUsage, HighCPUThreshold)
 		if err != nil {
@@ -283,8 +284,8 @@ func (s *System) createAlertIfNeeded(ctx context.Context, alertType model.AlertT
 			"type", alertToSave.Type,
 			"threshold", alertToSave.Threshold,
 			"value", alertToSave.Value)
-		alertsTotal.Inc()
-		alertsActiveTotal.Inc()
+		prometheus.AlertsTotal.Inc()
+		prometheus.AlertsActiveTotal.Inc()
 
 		notification := notifications.Notification{
 			Type:      alertType,
@@ -321,7 +322,7 @@ func (s *System) resolveAlertIfNeeded(ctx context.Context, alertType model.Alert
 		slog.Info("зарезолвлен алерт",
 			"type", alert.Type,
 			"value", alert.Value)
-		alertsActiveTotal.Dec()
+		prometheus.AlertsActiveTotal.Dec()
 
 		notification := notifications.Notification{
 			Type:      alertType,
