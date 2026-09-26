@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"server-watch/internal/system"
 	"server-watch/internal/system/model"
 	"testing"
 	"time"
@@ -11,7 +10,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func newTestDB(t *testing.T) *sql.DB {
+func newTestDB(t testing.TB) *sql.DB {
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatalf("не удалось подключиться к тестовой базе данных: %v", err)
@@ -35,7 +34,7 @@ func TestSQLiteRepository_SaveMetrics(t *testing.T) {
 	db := newTestDB(t)
 	repo := NewSQLiteRepository(db)
 
-	metrics := system.Metrics{
+	metrics := model.Metrics{
 		CPUUsage:   25.5,
 		MemUsage:   40.0,
 		MemUsedMB:  4000,
@@ -267,7 +266,7 @@ func TestSQLiteRepository_GetMetrics(t *testing.T) {
 
 	now := time.Now().UTC()
 
-	metrics1 := system.Metrics{
+	metrics1 := model.Metrics{
 		CPUUsage:   25.5,
 		MemUsage:   40.0,
 		MemUsedMB:  4000,
@@ -278,7 +277,7 @@ func TestSQLiteRepository_GetMetrics(t *testing.T) {
 		Timestamp:  now.Add(-10 * time.Minute),
 	}
 
-	metrics2 := system.Metrics{
+	metrics2 := model.Metrics{
 		CPUUsage:   75.2,
 		MemUsage:   75.0,
 		MemUsedMB:  6000,
@@ -327,7 +326,7 @@ func TestSQLiteRepository_GetMetrics_IncludesBoundaries(t *testing.T) {
 
 	now := time.Now().UTC()
 
-	metrics1 := system.Metrics{
+	metrics1 := model.Metrics{
 		CPUUsage:   25.5,
 		MemUsage:   40.0,
 		MemUsedMB:  4000,
@@ -338,7 +337,7 @@ func TestSQLiteRepository_GetMetrics_IncludesBoundaries(t *testing.T) {
 		Timestamp:  now.Add(-10 * time.Minute),
 	}
 
-	metrics2 := system.Metrics{
+	metrics2 := model.Metrics{
 		CPUUsage:   75.2,
 		MemUsage:   75.0,
 		MemUsedMB:  6000,

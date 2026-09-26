@@ -13,7 +13,7 @@ import (
 )
 
 type FakeRepository struct {
-	metrics []Metrics
+	metrics []model.Metrics
 	alerts  []model.Alert
 
 	saveMetricsErr    error
@@ -26,7 +26,7 @@ type FakeRepository struct {
 	nextAlertID int64
 }
 
-func (f *FakeRepository) SaveMetrics(ctx context.Context, metrics Metrics) error {
+func (f *FakeRepository) SaveMetrics(ctx context.Context, metrics model.Metrics) error {
 	if f.saveMetricsErr != nil {
 		return f.saveMetricsErr
 	}
@@ -46,12 +46,12 @@ func (f *FakeRepository) SaveAlert(ctx context.Context, alert model.Alert) (int6
 	return alert.ID, nil
 }
 
-func (f *FakeRepository) GetMetrics(ctx context.Context, from time.Time, to time.Time) ([]Metrics, error) {
+func (f *FakeRepository) GetMetrics(ctx context.Context, from time.Time, to time.Time) ([]model.Metrics, error) {
 	if f.getMetricsErr != nil {
 		return nil, f.getMetricsErr
 	}
 
-	var metrics []Metrics
+	var metrics []model.Metrics
 	for _, metric := range f.metrics {
 		if !metric.Timestamp.After(to) && !metric.Timestamp.Before(from) {
 			metrics = append(metrics, metric)
@@ -111,17 +111,17 @@ func (f *FakeRepository) GetActiveAlert(ctx context.Context, alertType model.Ale
 }
 
 type FakeMetricsCache struct {
-	metrics Metrics
+	metrics model.Metrics
 	getErr  error
 	setErr  error
 }
 
-func (f *FakeMetricsCache) SetMetrics(ctx context.Context, metrics Metrics) error {
+func (f *FakeMetricsCache) SetMetrics(ctx context.Context, metrics model.Metrics) error {
 	f.metrics = metrics
 	return f.setErr
 }
 
-func (f *FakeMetricsCache) GetMetrics(ctx context.Context) (Metrics, error) {
+func (f *FakeMetricsCache) GetMetrics(ctx context.Context) (model.Metrics, error) {
 	return f.metrics, f.getErr
 }
 
@@ -182,7 +182,7 @@ func TestSystem_CollectMetrics(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeRepo := &FakeRepository{
-				metrics:        make([]Metrics, 0),
+				metrics:        make([]model.Metrics, 0),
 				saveMetricsErr: tt.repoErr,
 			}
 
@@ -197,11 +197,11 @@ func TestSystem_CollectMetrics(t *testing.T) {
 }
 
 func TestSystem_ProcessAlerts_CreateAlertAndNotification(t *testing.T) {
-	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]model.Alert, 0)}
+	fakeRepo := &FakeRepository{metrics: make([]model.Metrics, 0), alerts: make([]model.Alert, 0)}
 	queue := &mockNotificationQueue{}
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{}, queue)
 
-	metrics := Metrics{
+	metrics := model.Metrics{
 		CPUUsage: 95.5,
 	}
 	update := model.AlertUpdate{
@@ -279,7 +279,7 @@ func TestSystem_ProcessAlerts_CreateAlertAndNotification(t *testing.T) {
 }
 
 func TestSystem_ProcessAlerts_CreateAlertWithActive(t *testing.T) {
-	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]model.Alert, 0)}
+	fakeRepo := &FakeRepository{metrics: make([]model.Metrics, 0), alerts: make([]model.Alert, 0)}
 
 	// сохраняем активный алерт до теста, чтобы новый алерт не создавался
 	_, err := fakeRepo.SaveAlert(context.Background(), model.Alert{
@@ -290,7 +290,7 @@ func TestSystem_ProcessAlerts_CreateAlertWithActive(t *testing.T) {
 	}
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{}, &mockNotificationQueue{})
 
-	metrics := Metrics{
+	metrics := model.Metrics{
 		CPUUsage: 95.5,
 	}
 	update := model.AlertUpdate{
@@ -312,13 +312,13 @@ func TestSystem_ProcessAlerts_CreateAlert_GetActiveAlertError(t *testing.T) {
 	fakeErr := errors.New("не удалось получить список активных алертов")
 
 	fakeRepo := &FakeRepository{
-		metrics:           make([]Metrics, 0),
+		metrics:           make([]model.Metrics, 0),
 		alerts:            make([]model.Alert, 0),
 		getActiveAlertErr: fakeErr,
 	}
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{}, &mockNotificationQueue{})
 
-	metrics := Metrics{
+	metrics := model.Metrics{
 		CPUUsage: 95.5,
 	}
 	update := model.AlertUpdate{
@@ -336,13 +336,13 @@ func TestSystem_ProcessAlerts_CreateAlert_SaveAlertError(t *testing.T) {
 	fakeErr := errors.New("не удалось сохранить алерт")
 
 	fakeRepo := &FakeRepository{
-		metrics:      make([]Metrics, 0),
+		metrics:      make([]model.Metrics, 0),
 		alerts:       make([]model.Alert, 0),
 		saveAlertErr: fakeErr,
 	}
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{}, &mockNotificationQueue{})
 
-	metrics := Metrics{
+	metrics := model.Metrics{
 		CPUUsage: 95.5,
 	}
 	update := model.AlertUpdate{
@@ -357,7 +357,7 @@ func TestSystem_ProcessAlerts_CreateAlert_SaveAlertError(t *testing.T) {
 }
 
 func TestSystem_ProcessAlerts_ResolveAlert(t *testing.T) {
-	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]model.Alert, 0)}
+	fakeRepo := &FakeRepository{metrics: make([]model.Metrics, 0), alerts: make([]model.Alert, 0)}
 
 	alert := model.Alert{
 		ID:         1,
@@ -376,7 +376,7 @@ func TestSystem_ProcessAlerts_ResolveAlert(t *testing.T) {
 		CPUCondition: model.ConditionNormal,
 	}
 
-	err := system.processAlerts(context.Background(), Metrics{}, update)
+	err := system.processAlerts(context.Background(), model.Metrics{}, update)
 	if err != nil {
 		t.Fatalf("не удалось обработать алерт: %v", err)
 	}
@@ -424,7 +424,7 @@ func TestSystem_ProcessAlerts_ResolveAlert_GetActiveAlertError(t *testing.T) {
 	fakeErr := errors.New("не удалось получить активные алерты")
 
 	fakeRepo := &FakeRepository{
-		metrics:           make([]Metrics, 0),
+		metrics:           make([]model.Metrics, 0),
 		alerts:            make([]model.Alert, 0),
 		getActiveAlertErr: fakeErr,
 	}
@@ -435,7 +435,7 @@ func TestSystem_ProcessAlerts_ResolveAlert_GetActiveAlertError(t *testing.T) {
 		CPUCondition: model.ConditionNormal,
 	}
 
-	err := system.processAlerts(context.Background(), Metrics{}, update)
+	err := system.processAlerts(context.Background(), model.Metrics{}, update)
 	if !errors.Is(err, fakeErr) {
 		t.Fatalf("ожидали ошибку %v, получили %v", fakeErr, err)
 	}
@@ -445,7 +445,7 @@ func TestSystem_ProcessAlerts_ResolveAlert_ResolveError(t *testing.T) {
 	fakeErr := errors.New("не удалось зарезолвить алерт")
 
 	fakeRepo := &FakeRepository{
-		metrics:         make([]Metrics, 0),
+		metrics:         make([]model.Metrics, 0),
 		alerts:          make([]model.Alert, 0),
 		resolveAlertErr: fakeErr,
 	}
@@ -465,14 +465,14 @@ func TestSystem_ProcessAlerts_ResolveAlert_ResolveError(t *testing.T) {
 		CPUCondition: model.ConditionNormal,
 	}
 
-	err := system.processAlerts(context.Background(), Metrics{}, update)
+	err := system.processAlerts(context.Background(), model.Metrics{}, update)
 	if !errors.Is(err, fakeErr) {
 		t.Fatalf("ожидали ошибку %v, получили %v", fakeErr, err)
 	}
 }
 
 func TestSystem_ProcessAlerts_ResolveAlert_NoActiveAlert(t *testing.T) {
-	fakeRepo := &FakeRepository{metrics: make([]Metrics, 0), alerts: make([]model.Alert, 0)}
+	fakeRepo := &FakeRepository{metrics: make([]model.Metrics, 0), alerts: make([]model.Alert, 0)}
 
 	system := newTestSystem(fakeRepo, &FakeMetricsCache{}, &mockNotificationQueue{})
 	update := model.AlertUpdate{
@@ -480,7 +480,7 @@ func TestSystem_ProcessAlerts_ResolveAlert_NoActiveAlert(t *testing.T) {
 		CPUCondition: model.ConditionNormal,
 	}
 
-	err := system.processAlerts(context.Background(), Metrics{}, update)
+	err := system.processAlerts(context.Background(), model.Metrics{}, update)
 	if err != nil {
 		t.Fatalf("не удалось обработать алерт: %v", err)
 	}
@@ -488,12 +488,12 @@ func TestSystem_ProcessAlerts_ResolveAlert_NoActiveAlert(t *testing.T) {
 
 func TestSystem_GetHistory(t *testing.T) {
 	fakeRepo := FakeRepository{
-		metrics: make([]Metrics, 0),
+		metrics: make([]model.Metrics, 0),
 	}
 
 	now := time.Now().UTC()
 
-	metricsToAdd := []Metrics{{Timestamp: now}, {Timestamp: now}, {Timestamp: now.Add(-time.Minute * 5)}}
+	metricsToAdd := []model.Metrics{{Timestamp: now}, {Timestamp: now}, {Timestamp: now.Add(-time.Minute * 5)}}
 	for _, metric := range metricsToAdd {
 		err := fakeRepo.SaveMetrics(context.Background(), metric)
 		if err != nil {
@@ -516,7 +516,7 @@ func TestSystem_GetHistory_GetMetricsError(t *testing.T) {
 	fakeErr := errors.New("не удалось получить список измерений метрик")
 
 	fakeRepo := FakeRepository{
-		metrics:       make([]Metrics, 0),
+		metrics:       make([]model.Metrics, 0),
 		getMetricsErr: fakeErr,
 	}
 
@@ -531,12 +531,12 @@ func TestSystem_GetHistory_GetMetricsError(t *testing.T) {
 
 func TestSystem_GetHistory_IncludeBoundaries(t *testing.T) {
 	fakeRepo := FakeRepository{
-		metrics: make([]Metrics, 0),
+		metrics: make([]model.Metrics, 0),
 	}
 
 	now := time.Now().UTC()
 
-	metricsToAdd := []Metrics{
+	metricsToAdd := []model.Metrics{
 		{Timestamp: now},
 		{Timestamp: now.Add(-time.Minute)},
 		{Timestamp: now.Add(-time.Minute - time.Second)}}
@@ -754,7 +754,7 @@ func TestSystem_UpdateConfig_SaveError(t *testing.T) {
 }
 
 func TestSystem_GetMetrics_FromCache(t *testing.T) {
-	fakeCache := &FakeMetricsCache{metrics: Metrics{CPUUsage: 50.0}}
+	fakeCache := &FakeMetricsCache{metrics: model.Metrics{CPUUsage: 50.0}}
 
 	fakeSys := newTestSystem(nil, fakeCache, &mockNotificationQueue{})
 
@@ -769,7 +769,7 @@ func TestSystem_GetMetrics_CacheMiss(t *testing.T) {
 	fakeCache := &FakeMetricsCache{getErr: ErrCacheMiss}
 
 	fakeSys := newTestSystem(nil, fakeCache, &mockNotificationQueue{})
-	fakeSys.metrics = Metrics{CPUUsage: 30}
+	fakeSys.metrics = model.Metrics{CPUUsage: 30}
 
 	metrics := fakeSys.GetMetrics(context.Background())
 

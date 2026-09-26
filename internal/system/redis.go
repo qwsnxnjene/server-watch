@@ -11,8 +11,8 @@ var ErrCacheMiss = errors.New("метрики отсутствуют в кэше
 
 // MetricsCache определяет операции сохранения и получения системных метрик из кэша
 type MetricsCache interface {
-	SetMetrics(ctx context.Context, metrics Metrics) error
-	GetMetrics(ctx context.Context) (Metrics, error)
+	SetMetrics(ctx context.Context, metrics model.Metrics) error
+	GetMetrics(ctx context.Context) (model.Metrics, error)
 }
 
 // AlertStateStore управляет счётчиком последовательных условий

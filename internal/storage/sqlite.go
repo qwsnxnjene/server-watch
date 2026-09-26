@@ -23,6 +23,14 @@ func NewSQLite(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("не удалось установить соединение с базой данных: %w", err)
 	}
 
+	_, err = db.Exec(`PRAGMA journal_mode=WAL;`)
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("не удалось включить WAL: %w", err)
+	}
+
+	// db.SetMaxOpenConns(1)
+
 	return db, nil
 }
 

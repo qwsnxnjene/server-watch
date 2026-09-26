@@ -12,8 +12,8 @@ import (
 // System определяет интерфейс бизнес-логики,
 // необходимый HTTP-обработчикам
 type System interface {
-	GetMetrics(ctx context.Context) system.Metrics
-	GetHistory(ctx context.Context, from, to time.Time) ([]system.Metrics, error)
+	GetMetrics(ctx context.Context) model.Metrics
+	GetHistory(ctx context.Context, from, to time.Time) ([]model.Metrics, error)
 	GetAlerts(ctx context.Context, activeOnly bool) ([]model.Alert, error)
 	GetHealth() (time.Time, error)
 

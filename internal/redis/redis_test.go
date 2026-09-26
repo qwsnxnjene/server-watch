@@ -63,7 +63,7 @@ func TestRedisMetricsCache_SetGetMetrics(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 
-	metrics := system.Metrics{
+	metrics := model.Metrics{
 		CPUUsage:   30.3,
 		MemUsage:   50.0,
 		MemUsedMB:  1000,
@@ -96,7 +96,7 @@ func TestRedisMetricsCache_SetMetrics(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 
-	metrics := system.Metrics{
+	metrics := model.Metrics{
 		CPUUsage:   30.3,
 		MemUsage:   50.0,
 		MemUsedMB:  1000,
@@ -149,7 +149,7 @@ func TestRedisMetricsCache_SetMetrics_TimeStamp(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 
-	metrics := system.Metrics{
+	metrics := model.Metrics{
 		Timestamp: now,
 	}
 
@@ -178,7 +178,7 @@ func TestRedisMetricsCache_SetMetrics_TTL(t *testing.T) {
 
 	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:metrics:")
 
-	metrics := system.Metrics{
+	metrics := model.Metrics{
 		CPUUsage: 30.3,
 	}
 

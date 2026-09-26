@@ -6,11 +6,13 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"server-watch/internal/config"
 	"server-watch/internal/handlers"
 	"server-watch/internal/notifications"
+	"server-watch/internal/prometheus"
 	redis2 "server-watch/internal/redis"
 	"server-watch/internal/storage"
 	"server-watch/internal/system"
@@ -93,15 +95,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = system.RegisterPrometheusMetrics(); err != nil {
+	if err = prometheus.RegisterPrometheusMetrics(); err != nil {
 		slog.Error("не удалось зарегистрировать метрики Prometheus", "error", err)
 		os.Exit(1)
 	}
-	promHandler := system.PrometheusHandler()
+	promHandler := prometheus.PrometheusHandler()
 
 	metricsErrCh := startMetricsCollector(ctx, sys, &wg)
 
-	server := newHTTPServer(sys, &promHandler)
+	server := newHTTPServer(sys, &promHandler, cfg.PprofEnabled)
 	serverErrCh := startHTTPServer(server, &wg)
 
 	select {
@@ -127,14 +129,31 @@ func main() {
 	slog.Info("выполнение программы остановлено")
 }
 
-func newHTTPServer(sys *system.System, promHandler *http.Handler) *http.Server {
+func newHTTPServer(sys *system.System, promHandler *http.Handler, pprofEnable bool) *http.Server {
 	handler := handlers.NewHandler(sys, *promHandler)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/metrics", handler.MetricsHandler)
-	mux.HandleFunc("/health", handler.HealthHandler)
-	mux.HandleFunc("/history", handler.HistoryHandler)
-	mux.HandleFunc("/alerts", handler.AlertsHandler)
+	mux.Handle("/metrics", handlers.MetricsMiddleware(
+		http.HandlerFunc(handler.MetricsHandler),
+	))
+	mux.Handle("/health",
+		handlers.MetricsMiddleware(
+			http.HandlerFunc(handler.HealthHandler),
+		))
+	mux.Handle("/history", handlers.MetricsMiddleware(
+		http.HandlerFunc(handler.HistoryHandler),
+	))
+	mux.Handle("/alerts", handlers.MetricsMiddleware(
+		http.HandlerFunc(handler.AlertsHandler),
+	))
+	mux.Handle("/config", handlers.MetricsMiddleware(
+		http.HandlerFunc(handler.ConfigHandler),
+	))
+
+	if pprofEnable {
+		mux.HandleFunc("/debug/pprof/", pprof.Index)
+		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	}
 
 	return &http.Server{
 		Addr:    "localhost:8080",

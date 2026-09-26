@@ -22,6 +22,7 @@ type Config struct {
 	ResolveCount int     `yaml:"resolve_count"`
 	SlackEnabled bool    `yaml:"slack_enabled"`
 	SlackURL     string  `yaml:"slack_url"`
+	PprofEnabled bool    `yaml:"pprof_enabled"`
 }
 
 // Load загружает конфигурацию из YAML-файла и переменных окружения.
@@ -120,6 +121,7 @@ func DefaultConfig() Config {
 		TriggerCount: 3,
 		ResolveCount: 3,
 		SlackEnabled: false,
+		PprofEnabled: false,
 	}
 }
 
@@ -174,6 +176,16 @@ func loadFromEnv(cfg *Config) error {
 		}
 
 		cfg.SlackEnabled = val
+	}
+
+	value, exists = os.LookupEnv("PPROF_ENABLED")
+	if exists {
+		val, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("ошибка чтения PPROF_ENABLED из окружения: %w", err)
+		}
+
+		cfg.PprofEnabled = val
 	}
 
 	value, exists = os.LookupEnv("SLACK_URL")

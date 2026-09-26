@@ -17,13 +17,13 @@ import (
 )
 
 type FakeSystem struct {
-	metrics system.Metrics
+	metrics model.Metrics
 
 	lastSuccess time.Time
 	lastError   error
 
 	historyErr  error
-	history     []system.Metrics
+	history     []model.Metrics
 	historyFrom time.Time
 	historyTo   time.Time
 
@@ -36,11 +36,11 @@ type FakeSystem struct {
 	lastConfigUpdate system.ConfigUpdate
 }
 
-func (f *FakeSystem) GetMetrics(ctx context.Context) system.Metrics {
+func (f *FakeSystem) GetMetrics(ctx context.Context) model.Metrics {
 	return f.metrics
 }
 
-func (f *FakeSystem) GetHistory(ctx context.Context, from, to time.Time) ([]system.Metrics, error) {
+func (f *FakeSystem) GetHistory(ctx context.Context, from, to time.Time) ([]model.Metrics, error) {
 	f.historyFrom = from
 	f.historyTo = to
 
@@ -80,7 +80,7 @@ func (f *FakeSystem) GetConfig() config.Config {
 
 func TestHandler_MetricsHandler(t *testing.T) {
 	fakeSystem := &FakeSystem{
-		metrics: system.Metrics{
+		metrics: model.Metrics{
 			CPUUsage:   25.5,
 			MemUsage:   40.0,
 			MemUsedMB:  4000,
@@ -287,7 +287,7 @@ func TestHandler_HistoryHandler_JSON(t *testing.T) {
 	to := now
 
 	fakeSystem := &FakeSystem{
-		history: []system.Metrics{
+		history: []model.Metrics{
 			{
 				CPUUsage: 90.3,
 			},

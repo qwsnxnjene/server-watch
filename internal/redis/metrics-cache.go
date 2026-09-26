@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"server-watch/internal/system"
+	"server-watch/internal/system/model"
 	"strconv"
 	"time"
 
@@ -28,7 +29,7 @@ func NewRedisMetricsCache(client *redis.Client, ttl time.Duration, prefix string
 }
 
 // SetMetrics сохраняет текущие системные метрики в Redis
-func (r *RedisMetricsCache) SetMetrics(ctx context.Context, metrics system.Metrics) error {
+func (r *RedisMetricsCache) SetMetrics(ctx context.Context, metrics model.Metrics) error {
 	err := r.setMetric(ctx, r.prefix+"cpu", fmt.Sprintf("%.2f", metrics.CPUUsage))
 	if err != nil {
 		return err
@@ -75,61 +76,61 @@ func (r *RedisMetricsCache) setMetric(ctx context.Context, key, value string) er
 }
 
 // GetMetrics загружает метрики из Redis и рассчитывает производные показатели использования памяти и диска
-func (r *RedisMetricsCache) GetMetrics(ctx context.Context) (system.Metrics, error) {
-	metricsToReturn := system.Metrics{}
+func (r *RedisMetricsCache) GetMetrics(ctx context.Context) (model.Metrics, error) {
+	metricsToReturn := model.Metrics{}
 
 	cpuUsage, err := r.getFloatMetric(ctx, r.prefix+"cpu")
 	if err != nil {
-		return system.Metrics{}, err
+		return model.Metrics{}, err
 	}
 	metricsToReturn.CPUUsage = cpuUsage
 
 	memUsed, err := r.getFloatMetric(ctx, r.prefix+"mem_used")
 	if err != nil {
-		return system.Metrics{}, err
+		return model.Metrics{}, err
 	}
 	metricsToReturn.MemUsedMB = memUsed
 
 	memTotal, err := r.getFloatMetric(ctx, r.prefix+"mem_total")
 	if err != nil {
-		return system.Metrics{}, err
+		return model.Metrics{}, err
 	}
 	metricsToReturn.MemTotalMB = memTotal
 
 	diskUsed, err := r.getFloatMetric(ctx, r.prefix+"disk_used")
 	if err != nil {
-		return system.Metrics{}, err
+		return model.Metrics{}, err
 	}
 	metricsToReturn.DiskUsed = diskUsed
 
 	diskTotal, err := r.getFloatMetric(ctx, r.prefix+"disk_total")
 	if err != nil {
-		return system.Metrics{}, err
+		return model.Metrics{}, err
 	}
 	metricsToReturn.DiskTotal = diskTotal
 
 	ts, err := r.client.Get(ctx, r.prefix+"timestamp").Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return system.Metrics{}, system.ErrCacheMiss
+			return model.Metrics{}, system.ErrCacheMiss
 		}
-		return system.Metrics{}, fmt.Errorf("не удалось получить Timestamp из кэша: %w", err)
+		return model.Metrics{}, fmt.Errorf("не удалось получить Timestamp из кэша: %w", err)
 	}
 
 	timestamp, err := time.Parse(time.RFC3339, ts)
 	if err != nil {
-		return system.Metrics{}, fmt.Errorf("не удалось распарсить Timestamp: %w", err)
+		return model.Metrics{}, fmt.Errorf("не удалось распарсить Timestamp: %w", err)
 	}
 
 	metricsToReturn.Timestamp = timestamp
 
 	if memTotal == 0 {
-		return system.Metrics{}, errors.New("memTotal равен нулю")
+		return model.Metrics{}, errors.New("memTotal равен нулю")
 	}
 	metricsToReturn.MemUsage = memUsed / memTotal * 100
 
 	if diskTotal == 0 {
-		return system.Metrics{}, errors.New("diskTotal равен нулю")
+		return model.Metrics{}, errors.New("diskTotal равен нулю")
 	}
 	metricsToReturn.DiskUsage = diskUsed / diskTotal * 100
 

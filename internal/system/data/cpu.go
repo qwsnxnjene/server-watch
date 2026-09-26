@@ -22,20 +22,7 @@ func GetCPUUsage() (float64, error) {
 		return 0, fmt.Errorf("ошибка получения данных о процессоре: %w", err)
 	}
 
-	userDelta := statsSecond[0] - statsFirst[0]
-	niceDelta := statsSecond[1] - statsFirst[1]
-	sysDelta := statsSecond[2] - statsFirst[2]
-	idleDelta := statsSecond[3] - statsFirst[3]
-	iowaitDelta := statsSecond[4] - statsFirst[4]
-	irqDelta := statsSecond[5] - statsFirst[5]
-	softirqDelta := statsSecond[6] - statsFirst[6]
-	stealDelta := statsSecond[7] - statsFirst[7]
-
-	cpuWorkTime := userDelta + niceDelta + sysDelta + irqDelta + softirqDelta + stealDelta
-	totalTime := cpuWorkTime + idleDelta + iowaitDelta
-
-	return float64(cpuWorkTime) / float64(totalTime) * 100.0, nil
-
+	return calculateCPUUsage(statsFirst, statsSecond), nil
 }
 
 // readCPUStats парсит файл /proc/stat для показателей процессора.
@@ -102,4 +89,21 @@ func readCPUStats() ([8]uint64, error) {
 	}
 
 	return stats, nil
+}
+
+// calculateCPUUsage рассчитывает загрузку CPU по имеющемся данным
+func calculateCPUUsage(first, second [8]uint64) float64 {
+	userDelta := second[0] - first[0]
+	niceDelta := second[1] - first[1]
+	sysDelta := second[2] - first[2]
+	idleDelta := second[3] - first[3]
+	iowaitDelta := second[4] - first[4]
+	irqDelta := second[5] - first[5]
+	softirqDelta := second[6] - first[6]
+	stealDelta := second[7] - first[7]
+
+	cpuWorkTime := userDelta + niceDelta + sysDelta + irqDelta + softirqDelta + stealDelta
+	totalTime := cpuWorkTime + idleDelta + iowaitDelta
+
+	return float64(cpuWorkTime) / float64(totalTime) * 100.0
 }
