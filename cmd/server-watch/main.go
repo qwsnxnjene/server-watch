@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"server-watch/internal/config"
@@ -102,7 +103,7 @@ func main() {
 
 	metricsErrCh := startMetricsCollector(ctx, sys, &wg)
 
-	server := newHTTPServer(sys, &promHandler)
+	server := newHTTPServer(sys, &promHandler, cfg.PprofEnabled)
 	serverErrCh := startHTTPServer(server, &wg)
 
 	select {
@@ -128,7 +129,7 @@ func main() {
 	slog.Info("выполнение программы остановлено")
 }
 
-func newHTTPServer(sys *system.System, promHandler *http.Handler) *http.Server {
+func newHTTPServer(sys *system.System, promHandler *http.Handler, pprofEnable bool) *http.Server {
 	handler := handlers.NewHandler(sys, *promHandler)
 
 	mux := http.NewServeMux()
@@ -148,6 +149,11 @@ func newHTTPServer(sys *system.System, promHandler *http.Handler) *http.Server {
 	mux.Handle("/config", handlers.MetricsMiddleware(
 		http.HandlerFunc(handler.ConfigHandler),
 	))
+
+	if pprofEnable {
+		mux.HandleFunc("/debug/pprof/", pprof.Index)
+		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	}
 
 	return &http.Server{
 		Addr:    "localhost:8080",

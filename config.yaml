@@ -4,3 +4,4 @@ trigger_count: 3
 resolve_count: 3
 slack_enabled: false
 slack_url: ""
+pprof_enabled: false
