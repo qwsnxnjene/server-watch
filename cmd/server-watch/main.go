@@ -145,6 +145,9 @@ func newHTTPServer(sys *system.System, promHandler *http.Handler) *http.Server {
 	mux.Handle("/alerts", handlers.MetricsMiddleware(
 		http.HandlerFunc(handler.AlertsHandler),
 	))
+	mux.Handle("/config", handlers.MetricsMiddleware(
+		http.HandlerFunc(handler.ConfigHandler),
+	))
 
 	return &http.Server{
 		Addr:    "localhost:8080",

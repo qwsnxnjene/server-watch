@@ -10,7 +10,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func newTestDB(t *testing.T) *sql.DB {
+func newTestDB(t testing.TB) *sql.DB {
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatalf("не удалось подключиться к тестовой базе данных: %v", err)
