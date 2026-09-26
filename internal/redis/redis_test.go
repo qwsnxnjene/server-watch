@@ -20,12 +20,12 @@ func newTestRedis(t *testing.T) *redis.Client {
 	client := NewClient()
 
 	keys := []string{
-		"test:prometheus:cpu",
-		"test:prometheus:mem_used",
-		"test:prometheus:mem_total",
-		"test:prometheus:disk_used",
-		"test:prometheus:disk_total",
-		"test:prometheus:timestamp",
+		"test:metrics:cpu",
+		"test:metrics:mem_used",
+		"test:metrics:mem_total",
+		"test:metrics:disk_used",
+		"test:metrics:disk_total",
+		"test:metrics:timestamp",
 		"test:alert:cpu:count",
 		"test:alert:cpu:active",
 		"test:alert:mem:count",
@@ -59,7 +59,7 @@ func TestNewClient(t *testing.T) {
 func TestRedisMetricsCache_SetGetMetrics(t *testing.T) {
 	client := newTestRedis(t)
 
-	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:prometheus:")
+	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:metrics:")
 
 	now := time.Now().UTC().Truncate(time.Second)
 
@@ -92,7 +92,7 @@ func TestRedisMetricsCache_SetGetMetrics(t *testing.T) {
 func TestRedisMetricsCache_SetMetrics(t *testing.T) {
 	client := newTestRedis(t)
 
-	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:prometheus:")
+	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:metrics:")
 
 	now := time.Now().UTC().Truncate(time.Second)
 
@@ -116,11 +116,11 @@ func TestRedisMetricsCache_SetMetrics(t *testing.T) {
 		key  string
 		want float64
 	}{
-		{"test:prometheus:cpu", metrics.CPUUsage},
-		{"test:prometheus:mem_used", metrics.MemUsedMB},
-		{"test:prometheus:mem_total", metrics.MemTotalMB},
-		{"test:prometheus:disk_used", metrics.DiskUsed},
-		{"test:prometheus:disk_total", metrics.DiskTotal},
+		{"test:metrics:cpu", metrics.CPUUsage},
+		{"test:metrics:mem_used", metrics.MemUsedMB},
+		{"test:metrics:mem_total", metrics.MemTotalMB},
+		{"test:metrics:disk_used", metrics.DiskUsed},
+		{"test:metrics:disk_total", metrics.DiskTotal},
 	}
 
 	for _, tt := range tests {
@@ -145,7 +145,7 @@ func TestRedisMetricsCache_SetMetrics(t *testing.T) {
 func TestRedisMetricsCache_SetMetrics_TimeStamp(t *testing.T) {
 	client := newTestRedis(t)
 
-	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:prometheus:")
+	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:metrics:")
 
 	now := time.Now().UTC().Truncate(time.Second)
 
@@ -158,25 +158,25 @@ func TestRedisMetricsCache_SetMetrics_TimeStamp(t *testing.T) {
 		t.Fatalf("ошибка SetMetrics: %v", err)
 	}
 
-	value, err := metricsCache.client.Get(context.Background(), "test:prometheus:timestamp").Result()
+	value, err := metricsCache.client.Get(context.Background(), "test:metrics:timestamp").Result()
 	if err != nil {
-		t.Fatalf("не удалось получить prometheus:timestamp: %v", err)
+		t.Fatalf("не удалось получить metrics:timestamp: %v", err)
 	}
 
 	got, err := time.Parse(time.RFC3339, value)
 	if err != nil {
-		t.Fatalf("не удалось спарсить prometheus:timestamp: %v", err)
+		t.Fatalf("не удалось спарсить metrics:timestamp: %v", err)
 	}
 
 	if got != now {
-		t.Fatalf("ожидали prometheus:timestamp = %v, получили %v", now, got)
+		t.Fatalf("ожидали metrics:timestamp = %v, получили %v", now, got)
 	}
 }
 
 func TestRedisMetricsCache_SetMetrics_TTL(t *testing.T) {
 	client := newTestRedis(t)
 
-	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:prometheus:")
+	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:metrics:")
 
 	metrics := model.Metrics{
 		CPUUsage: 30.3,
@@ -189,7 +189,7 @@ func TestRedisMetricsCache_SetMetrics_TTL(t *testing.T) {
 
 	ttl, err := metricsCache.client.TTL(
 		context.Background(),
-		"test:prometheus:cpu",
+		"test:metrics:cpu",
 	).Result()
 	if err != nil {
 		t.Fatalf("не удалось получить TTL: %v", err)
@@ -203,7 +203,7 @@ func TestRedisMetricsCache_SetMetrics_TTL(t *testing.T) {
 func TestRedisMetricsCache_GetMetrics_CacheMiss(t *testing.T) {
 	client := newTestRedis(t)
 
-	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:prometheus:")
+	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:metrics:")
 
 	_, err := metricsCache.GetMetrics(context.Background())
 	if !errors.Is(err, system.ErrCacheMiss) {
@@ -214,9 +214,9 @@ func TestRedisMetricsCache_GetMetrics_CacheMiss(t *testing.T) {
 func TestRedisMetricsCache_GetMetrics_InvalidValue(t *testing.T) {
 	client := newTestRedis(t)
 
-	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:prometheus:")
+	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:metrics:")
 
-	err := client.Set(context.Background(), "test:prometheus:cpu", "abc", time.Minute).Err()
+	err := client.Set(context.Background(), "test:metrics:cpu", "abc", time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
@@ -234,29 +234,29 @@ func TestRedisMetricsCache_GetMetrics_InvalidValue(t *testing.T) {
 func TestRedisMetricsCache_GetMetrics_InvalidTimestamp(t *testing.T) {
 	client := newTestRedis(t)
 
-	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:prometheus:")
+	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:metrics:")
 
-	err := client.Set(context.Background(), "test:prometheus:cpu", "30.0", time.Minute).Err()
+	err := client.Set(context.Background(), "test:metrics:cpu", "30.0", time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
-	err = client.Set(context.Background(), "test:prometheus:mem_used", "30.0", time.Minute).Err()
+	err = client.Set(context.Background(), "test:metrics:mem_used", "30.0", time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
-	err = client.Set(context.Background(), "test:prometheus:mem_total", "80.0", time.Minute).Err()
+	err = client.Set(context.Background(), "test:metrics:mem_total", "80.0", time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
-	err = client.Set(context.Background(), "test:prometheus:disk_used", "30.0", time.Minute).Err()
+	err = client.Set(context.Background(), "test:metrics:disk_used", "30.0", time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
-	err = client.Set(context.Background(), "test:prometheus:disk_total", "100.0", time.Minute).Err()
+	err = client.Set(context.Background(), "test:metrics:disk_total", "100.0", time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
-	err = client.Set(context.Background(), "test:prometheus:timestamp", "invalid", time.Minute).Err()
+	err = client.Set(context.Background(), "test:metrics:timestamp", "invalid", time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
@@ -274,29 +274,29 @@ func TestRedisMetricsCache_GetMetrics_InvalidTimestamp(t *testing.T) {
 func TestRedisMetricsCache_GetMetrics_ZeroMemTotal(t *testing.T) {
 	client := newTestRedis(t)
 
-	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:prometheus:")
+	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:metrics:")
 
-	err := client.Set(context.Background(), "test:prometheus:cpu", "30.0", time.Minute).Err()
+	err := client.Set(context.Background(), "test:metrics:cpu", "30.0", time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
-	err = client.Set(context.Background(), "test:prometheus:mem_used", "30.0", time.Minute).Err()
+	err = client.Set(context.Background(), "test:metrics:mem_used", "30.0", time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
-	err = client.Set(context.Background(), "test:prometheus:mem_total", "0", time.Minute).Err()
+	err = client.Set(context.Background(), "test:metrics:mem_total", "0", time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
-	err = client.Set(context.Background(), "test:prometheus:disk_used", "30.0", time.Minute).Err()
+	err = client.Set(context.Background(), "test:metrics:disk_used", "30.0", time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
-	err = client.Set(context.Background(), "test:prometheus:disk_total", "100.0", time.Minute).Err()
+	err = client.Set(context.Background(), "test:metrics:disk_total", "100.0", time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
-	err = client.Set(context.Background(), "test:prometheus:timestamp", time.Now().UTC().Format(time.RFC3339), time.Minute).Err()
+	err = client.Set(context.Background(), "test:metrics:timestamp", time.Now().UTC().Format(time.RFC3339), time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
@@ -314,29 +314,29 @@ func TestRedisMetricsCache_GetMetrics_ZeroMemTotal(t *testing.T) {
 func TestRedisMetricsCache_GetMetrics_ZeroDiskTotal(t *testing.T) {
 	client := newTestRedis(t)
 
-	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:prometheus:")
+	metricsCache := NewRedisMetricsCache(client, 30*time.Second, "test:metrics:")
 
-	err := client.Set(context.Background(), "test:prometheus:cpu", "30.0", time.Minute).Err()
+	err := client.Set(context.Background(), "test:metrics:cpu", "30.0", time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
-	err = client.Set(context.Background(), "test:prometheus:mem_used", "30.0", time.Minute).Err()
+	err = client.Set(context.Background(), "test:metrics:mem_used", "30.0", time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
-	err = client.Set(context.Background(), "test:prometheus:mem_total", "40.0", time.Minute).Err()
+	err = client.Set(context.Background(), "test:metrics:mem_total", "40.0", time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
-	err = client.Set(context.Background(), "test:prometheus:disk_used", "30.0", time.Minute).Err()
+	err = client.Set(context.Background(), "test:metrics:disk_used", "30.0", time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
-	err = client.Set(context.Background(), "test:prometheus:disk_total", "0", time.Minute).Err()
+	err = client.Set(context.Background(), "test:metrics:disk_total", "0", time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}
-	err = client.Set(context.Background(), "test:prometheus:timestamp", time.Now().UTC().Format(time.RFC3339), time.Minute).Err()
+	err = client.Set(context.Background(), "test:metrics:timestamp", time.Now().UTC().Format(time.RFC3339), time.Minute).Err()
 	if err != nil {
 		t.Fatalf("не удалось установить тестовое значение: %v", err)
 	}

@@ -327,7 +327,7 @@ GET /metrics
   "level": "INFO",
   "msg": "получен запрос",
   "request_id": "fb50df12-60c5-4013-ac5f-f38dd2a70021",
-  "path": "/prometheus"
+  "path": "/metrics"
 }
 ```
 

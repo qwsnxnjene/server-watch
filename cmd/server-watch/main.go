@@ -54,7 +54,7 @@ func main() {
 	)
 
 	client := redis2.NewClient()
-	cache := redis2.NewRedisMetricsCache(client, 30*time.Second, "server-watch:prometheus:")
+	cache := redis2.NewRedisMetricsCache(client, 30*time.Second, "server-watch:metrics:")
 	go redis2.StartRedisHealthCheck(ctx, client, 10*time.Second)
 
 	// Redis используется как основное хранилище состояния алертов.

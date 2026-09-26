@@ -10,7 +10,7 @@ import (
 
 // HistoryResponse представляет историю измерений метрик в HTTP API
 type HistoryResponse struct {
-	Metrics []MetricsResponse `json:"prometheus"`
+	Metrics []MetricsResponse `json:"metrics"`
 }
 
 // HistoryHandler обрабатывает запросы к /history и возвращает историю измерений метрик

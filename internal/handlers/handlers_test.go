@@ -96,7 +96,7 @@ func TestHandler_MetricsHandler(t *testing.T) {
 	})
 	handler := NewHandler(fakeSystem, prometheusHandler)
 
-	req := httptest.NewRequest(http.MethodGet, "/prometheus", nil)
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	req.Header.Set("Accept", "application/json")
 	rw := httptest.NewRecorder()
 
@@ -174,7 +174,7 @@ func TestAcceptsPrometheus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/prometheus", nil)
+			req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 
 			if tt.accept != "" {
 				req.Header.Set("Accept", tt.accept)
