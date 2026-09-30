@@ -40,7 +40,11 @@ func main() {
 	}
 	defer db.Close()
 
-	cfg, err := config.Load("config.yaml")
+	configPath := os.Getenv("CONFIG_PATH")
+	if configPath == "" {
+		configPath = "config.yaml"
+	}
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		slog.Error("не удалось загрузить конфигурацию", "error", err)
 		os.Exit(1)
@@ -156,7 +160,7 @@ func newHTTPServer(sys *system.System, promHandler *http.Handler, pprofEnable bo
 	}
 
 	return &http.Server{
-		Addr:    "localhost:8080",
+		Addr:    ":8080",
 		Handler: handlers.RequestIDMiddleware(mux),
 	}
 }
@@ -216,7 +220,12 @@ func startHTTPServer(server *http.Server, wg *sync.WaitGroup) <-chan error {
 // setupDatabase открывает SQLite-базу, применяет миграции
 // и создаёт репозиторий для работы с ней
 func setupDatabase() (*sql.DB, *storage.SQLiteRepository, error) {
-	db, err := storage.NewSQLite("server-watch.db")
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "server-watch.db"
+	}
+
+	db, err := storage.NewSQLite(dbPath)
 	if err != nil {
 		return nil, nil, err
 	}
