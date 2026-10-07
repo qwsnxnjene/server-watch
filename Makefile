@@ -3,7 +3,6 @@ run:
 
 up:
 	docker compose up -d
-	go run ./cmd/server-watch/main.go
 
 stop:
 	docker compose down

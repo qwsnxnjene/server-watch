@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: server-watch
+  template:
+    metadata:
+      labels:
+        app: server-watch
+    spec:
+      initContainers:
+        - name: init-config
+          image: alpine:latest
+          command:
+            - sh
+            - -c
+            - |
+              if [ ! -f /config/config.yaml ]; then
+                cp /config-source/config.yaml /config/config.yaml
+              fi
+          volumeMounts:
+            - name: config-source
+              mountPath: /config-source
+            - name: config-data
+              mountPath: /config
+      containers:
+        - name: server-watch
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+          env:
+            - name: CONFIG_PATH
+              value: /config/config.yaml
+            - name: DB_PATH
+              value: /data/server-watch.db
+            - name: REDIS_ADDR
+              value: redis:6379
+            - name: SLACK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secret
+                  key: SLACK_URL
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - mountPath: /config
+              name: config-data
+            - mountPath: /data
+              name: sqlite-data
+
+      volumes:
+        - name: config-source
+          configMap:
+            name: {{ .Release.Name }}-config
+        - name: config-data
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-config
+        - name: sqlite-data
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-sqlite

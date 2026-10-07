@@ -5,7 +5,7 @@ services:
     image: prom/prometheus:latest
     container_name: prometheus
     ports:
-      - 9090:9090
+      - "9090:9090"
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=15d
@@ -16,11 +16,36 @@ services:
     image: grafana/grafana:latest
     container_name: grafana
     ports:
-      - 3000:3000
+      - "3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
+  redis:
+    image: redis:latest
+    container_name: server-watch-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+  server-watch:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: server-watch
+    ports:
+      - "8080:8080"
+    environment:
+      REDIS_ADDR: redis:6379
+      CONFIG_PATH: /app/config.yaml
+      DB_PATH: /data/server-watch.db
+    volumes:
+      - ./config.yaml:/app/config.yaml
+      - sqlite_data:/data
+    depends_on:
+      - redis
 
 volumes:
   grafana_data:
   prometheus_data:
+  redis_data:
+  sqlite_data:

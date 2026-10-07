@@ -46,165 +46,612 @@
 
 Проект развивается поэтапно: каждый новый этап добавляет инфраструктурную или архитектурную возможности, не ломая уже существующую функциональность.
 
-# Этап 6 - Бенчмарки и производительность
+# Этап 7 — Docker и Kubernetes
 
 ## Цель этапа
 
-Добавить измерение производительности HTTP API, научиться получать данные о latency и RPS, проводить нагрузочное тестирование и измерять производительность отдельных компонентов приложения.
+Подготовить `server-watch` к запуску в контейнере и Kubernetes.
+
+На этом этапе проект переводится от локального запуска приложения к воспроизводимому инфраструктурному окружению:
+
+* собирается Docker image;
+* используется multi-stage Docker build;
+* приложение запускается в минимальном runtime image;
+* внешние зависимости подключаются через Docker Compose;
+* конфигурация и данные сохраняются вне контейнера;
+* Kubernetes-манифесты объединяются в Helm chart;
+* проверяется жизненный цикл приложения в Kubernetes;
+* проверяется сохранение данных при пересоздании Pod.
+
+Этап является учебным и не ставит целью полностью production-ready Kubernetes deployment.
 
 ---
 
-## Что необходимо реализовать
+## Docker
 
-На этом этапе добавлены:
+Для сборки приложения используется multi-stage Dockerfile.
 
-* middleware для измерения времени обработки HTTP-запросов;
-* Prometheus histogram для HTTP latency;
-* labels `path`, `method` и `status`;
-* сбор HTTP-метрик через Prometheus;
-* Grafana dashboard для мониторинга:
+На этапе сборки используется:
 
-  * RPS;
-  * P50;
-  * P95;
-  * P99;
-* нагрузочное тестирование HTTP endpoints с помощью `hey`;
-* Go benchmark-тесты для критических участков кода;
-* измерение CPU calculation и чтения `/proc/stat`;
-* benchmark JSON encode/decode;
-* benchmark работы с состоянием алертов;
-* benchmark Redis operations;
-* benchmark SQLite read/write operations;
-* исследование поведения SQLite под нагрузкой;
-* эксперимент с SQLite WAL;
-* базовая интеграция `pprof`.
+```text
+golang:1.27.1
+```
+
+После компиляции бинарник переносится в минимальный runtime image:
+
+```text
+scratch
+```
+
+Приложение собирается как статический Linux binary:
+
+```dockerfile
+RUN CGO_ENABLED=0 GOOS=linux \
+    go build -ldflags="-s -w" \
+    -o server-watch \
+    ./cmd/server-watch
+```
+
+Runtime image содержит только:
+
+* бинарник `server-watch`;
+* `config.yaml`.
+
+Проверка бинарника показала, что он статический, поэтому использование `scratch` возможно без дополнительной runtime-библиотеки.
 
 ---
 
-# HTTP latency
+## Docker image
 
-Для измерения времени обработки запросов используется Prometheus Histogram.
-
-В метрику записываются:
+После сборки размер image составляет примерно:
 
 ```text
-path
-method
-status
+32 MB
 ```
 
-Это позволяет отдельно анализировать производительность каждого endpoint.
+Формальный ориентир `<30 MB` в текущей реализации не достигнут.
 
-Например:
+При этом image уже значительно меньше типичного runtime image с полноценной Linux userland и содержит только необходимые для запуска приложения файлы.
+
+---
+
+## Особенность scratch image
+
+Так как runtime использует:
 
 ```text
-/history
-/alerts
-/metrics
-/health
+scratch
 ```
 
-На основе histogram в Grafana отображаются:
+в контейнере отсутствуют:
+
+* shell;
+* `cat`;
+* `sh`;
+* `printenv`;
+* другие стандартные Linux utilities.
+
+Поэтому диагностика контейнера выполняется преимущественно через:
+
+* HTTP endpoints приложения;
+* `docker logs`;
+* `kubectl logs`;
+* внешние debug/curl-контейнеры.
+
+---
+
+## Docker Compose
+
+Для локального инфраструктурного окружения используется:
 
 ```text
-RPS
-P50
-P95
-P99
+docker-compose.yml
+```
+
+Compose включает:
+
+```text
+server-watch
+redis
+prometheus
+grafana
+```
+
+Схема окружения:
+
+```text
+              ┌──────────────┐
+              │    Grafana   │
+              │    :3000     │
+              └──────┬───────┘
+                     │
+                     ▼
+              ┌──────────────┐
+              │  Prometheus  │
+              │    :9090     │
+              └──────┬───────┘
+                     │ scrape
+                     ▼
+┌──────────────┐  ┌──────────────┐
+│    Redis     │◄─│ server-watch │
+│    :6379     │  │    :8080     │
+└──────────────┘  └──────┬───────┘
+                         │
+                         ▼
+                  SQLite volume
+```
+
+`server-watch` получает адрес Redis через:
+
+```text
+REDIS_ADDR=redis:6379
+```
+
+Prometheus получает метрики с:
+
+```text
+server-watch:8080
+```
+
+Grafana использует Prometheus как datasource.
+
+---
+
+## Персистентность в Compose
+
+SQLite не хранится внутри контейнера приложения.
+
+В Compose используется отдельный volume:
+
+```text
+sqlite_data
+```
+
+Он монтируется в:
+
+```text
+/data
+```
+
+Приложение использует:
+
+```text
+DB_PATH=/data/server-watch.db
+```
+
+Поэтому удаление и пересоздание контейнера `server-watch` не удаляет историю метрик.
+
+Конфигурация также вынесена из image:
+
+```text
+./config.yaml:/app/config.yaml
+```
+
+Это необходимо, потому что endpoint `/config` может изменять конфигурацию приложения.
+
+---
+
+## Конфигурация
+
+Путь к конфигурации задаётся через:
+
+```text
+CONFIG_PATH
+```
+
+Если переменная не задана, используется:
+
+```text
+config.yaml
+```
+
+Для Docker Compose используется:
+
+```text
+CONFIG_PATH=/app/config.yaml
+```
+
+Путь к SQLite задаётся через:
+
+```text
+DB_PATH
 ```
 
 ---
 
-# Нагрузочное тестирование
+## Environment variables
 
-Для нагрузочного тестирования используется:
-
-```bash
-hey
-```
-
-Тестировались основные HTTP endpoints приложения при разной concurrency.
-
-Для `/history` дополнительно исследовалось влияние количества одновременных запросов на throughput и latency.
-
-Во время тестирования была воспроизведена проблема SQLite:
+В текущей реализации используются следующие переменные окружения:
 
 ```text
-database is locked
-(SQLITE_BUSY)
-```
+CONFIG_PATH
+DB_PATH
+REDIS_ADDR
 
-После этого было проверено несколько вариантов работы SQLite, включая ограничение количества соединений и WAL mode.
+CPU_THRESHOLD
+MEM_THRESHOLD
+TRIGGER_COUNT
+RESOLVE_COUNT
 
-WAL позволил убрать наблюдавшиеся ошибки блокировки при проведённых нагрузочных тестах.
+SLACK_ENABLED
+SLACK_URL
 
-Подробные результаты находятся в:
-
-```text
-docs/benchmarks.md
-```
-
----
-
-# Go benchmarks
-
-Для критических участков кода добавлены benchmark-тесты с помощью `testing.B`.
-
-Проверяется производительность:
-
-* расчёта CPU usage;
-* чтения и разбора `/proc/stat`;
-* JSON encode/decode;
-* изменения состояния алертов;
-* Redis operations;
-* SQLite read/write.
-
-Запуск:
-
-```bash
-go test ./... -bench=. -benchmem
-```
-
-Benchmarks позволяют отдельно измерять стоимость небольших операций и сравнивать изменения реализации.
-
----
-
-# pprof
-
-В конце этапа была проведена пробная профилировка приложения с помощью встроенного Go `pprof`.
-
-pprof позволяет посмотреть, какие участки программы потребляют CPU во время реальной нагрузки.
-
-Профилирование можно включить через конфигурацию и переменную окружения:
-
-```text
 PPROF_ENABLED
 ```
 
-По умолчанию pprof отключён.
+Важно: некоторые переменные из первоначального инфраструктурного плана пока не реализованы в коде, например:
 
-Во время эксперимента `/history` запускался под нагрузкой, после чего CPU profile анализировался через:
-
-```bash
-go tool pprof
+```text
+REDIS_PASSWORD
+REDIS_DB
+SLACK_WEBHOOK_URL
+WEBHOOK_URL
+LOG_LEVEL
 ```
 
-Профилирование показало, в частности, заметную нагрузку со стороны SQLite, JSON serialization и работы с временем.
+Поэтому они не используются текущим deployment'ом.
 
-Более глубокий анализ pprof оставлен для отдельного этапа.
+---
+
+# Kubernetes
+
+Для Kubernetes создан Helm chart:
+
+```text
+helm/server-watch/
+```
+
+Chart содержит:
+
+```text
+Chart.yaml
+values.yaml
+templates/
+```
+
+Проверка chart:
+
+```bash
+helm lint helm/server-watch
+```
+
+Рендеринг:
+
+```bash
+helm template server-watch helm/server-watch
+```
+
+---
+
+## Kubernetes resources
+
+Helm chart создаёт:
+
+* Deployment;
+* Service;
+* ConfigMap;
+* Secret;
+* PVC для конфигурации;
+* PVC для SQLite.
+
+Структура окружения:
+
+```text
+              ┌──────────────────┐
+              │      Service     │
+              │    ClusterIP     │
+              │      :8080       │
+              └────────┬─────────┘
+                       │
+                       ▼
+              ┌──────────────────┐
+              │    Deployment    │
+              │  server-watch    │
+              └────────┬─────────┘
+                       │
+              ┌────────┴─────────┐
+              ▼                  ▼
+       config PVC          sqlite PVC
+```
+
+---
+
+## Kubernetes Service
+
+Service имеет тип:
+
+```text
+ClusterIP
+```
+
+и публикует:
+
+```text
+8080
+```
+
+наружу сервис напрямую не выставляется.
+
+Для проверки HTTP API внутри кластера использовался временный Pod с `curl`.
+
+Например:
+
+```bash
+kubectl run curl --rm -it \
+  --image=curlimages/curl \
+  --restart=Never \
+  -- \
+  curl http://server-watch:8080/health
+```
+
+---
+
+## Health checks
+
+Для Kubernetes используется endpoint:
+
+```text
+/health
+```
+
+Он используется для проверки состояния приложения.
+
+Проверяется HTTP response:
+
+```text
+200 OK
+```
+
+После запуска или пересоздания Pod Kubernetes ждёт, пока приложение станет готово принимать запросы.
+
+Это позволяет не направлять трафик на Pod, который ещё не завершил запуск.
+
+---
+
+# Kubernetes configuration
+
+Начальная конфигурация приложения хранится в:
+
+```text
+ConfigMap
+```
+
+ConfigMap содержит:
+
+```yaml
+cpu_threshold: 80
+mem_threshold: 90
+trigger_count: 3
+resolve_count: 3
+slack_enabled: false
+slack_url: ""
+pprof_enabled: false
+```
+
+Так как приложение может изменять `config.yaml` через HTTP API, начальная конфигурация из ConfigMap при запуске копируется в отдельный PVC.
+
+Для этого используется `initContainer`.
+
+Он выполняет логику:
+
+```text
+если config.yaml ещё отсутствует
+        │
+        ▼
+скопировать его из ConfigMap
+        │
+        ▼
+основной контейнер использует PVC
+```
+
+Это позволяет одновременно использовать:
+
+* ConfigMap для начальной конфигурации;
+* PVC для изменяемой конфигурации.
+
+---
+
+# Kubernetes secrets
+
+Для Slack URL используется Kubernetes Secret:
+
+```text
+SLACK_URL
+```
+
+В Helm chart реальное значение секрета не хранится.
+
+Chart содержит только пустое значение-заглушку.
+
+Реальный secret должен задаваться отдельно при deployment.
+
+Таким образом, секрет не требуется хранить непосредственно в Git-репозитории или Docker image.
+
+---
+
+# SQLite в Kubernetes
+
+SQLite хранится на отдельном PersistentVolumeClaim:
+
+```text
+server-watch-sqlite
+```
+
+Приложение использует:
+
+```text
+DB_PATH=/data/server-watch.db
+```
+
+PVC имеет:
+
+```text
+ReadWriteOnce
+```
+
+и используется одним экземпляром приложения.
+
+Это связано с архитектурным ограничением проекта:
+
+```text
+replicaCount: 1
+```
+
+Несколько Pod с одной SQLite-базой в текущей архитектуре не используются.
+
+---
+
+# Проверка persistence
+
+Persistence была проверена экспериментально.
+
+Сценарий:
+
+```text
+1. Запустить server-watch
+2. Записать метрики
+3. Получить /history
+4. Удалить Pod
+5. Дождаться создания нового Pod
+6. Снова вызвать /history
+```
+
+После пересоздания Pod история метрик сохранилась.
+
+Это подтверждает, что SQLite database действительно находится на PVC, а не внутри filesystem контейнера.
+
+---
+
+# Helm lifecycle
+
+Проверен полный базовый lifecycle Helm release.
+
+Установка:
+
+```bash
+helm install server-watch helm/server-watch
+```
+
+Обновление:
+
+```bash
+helm upgrade server-watch helm/server-watch
+```
+
+Откат:
+
+```bash
+helm rollback server-watch 1
+```
+
+После rollback:
+
+* Pod успешно запустился;
+* Service остался доступен;
+* PVC остались `Bound`;
+* история SQLite сохранилась.
+
+Таким образом, deployment можно изменять и откатывать без потери persistent data.
+
+---
+
+# Graceful shutdown и logging
+
+Предыдущая реализация graceful shutdown сохраняется и при запуске в Kubernetes.
+
+При остановке контейнера Kubernetes отправляет:
+
+```text
+SIGTERM
+```
+
+Приложение корректно завершает:
+
+* HTTP server;
+* background workers;
+* collector;
+* context-dependent operations.
+
+Логи приложения выводятся в stdout в JSON-формате через:
+
+```text
+log/slog
+```
+
+Это позволяет использовать стандартные инструменты контейнерной инфраструктуры:
+
+```bash
+docker logs
+kubectl logs
+```
+
+---
+
+# Что проверено
+
+В рамках этапа проверены:
+
+* сборка Docker image;
+* запуск контейнера;
+* запуск Docker Compose;
+* Redis;
+* Prometheus;
+* Grafana;
+* HTTP API внутри Compose;
+* Helm lint;
+* Helm template;
+* Helm install;
+* Kubernetes Deployment;
+* Kubernetes Service;
+* ConfigMap;
+* Secret;
+* PVC для SQLite;
+* PVC для конфигурации;
+* `/health` внутри Kubernetes;
+* `/history` внутри Kubernetes;
+* пересоздание Pod;
+* сохранение SQLite history;
+* `helm upgrade`;
+* `helm rollback`.
+
+---
+
+# Ограничения текущей реализации
+
+Этап специально не доводит инфраструктуру до полноценного production deployment.
+
+Текущие ограничения:
+
+* используется один replica;
+* SQLite не рассчитан на несколько экземпляров приложения;
+* Docker image примерно 32 MB, а не `<30 MB`;
+* runtime использует `scratch`, поэтому внутри контейнера нет shell и диагностических утилит;
+* контейнер пока запускается от root;
+* Prometheus и Grafana запускаются через Docker Compose, но не входят в Helm chart;
+* ServiceMonitor пока не реализован;
+* нет CI/CD pipeline;
+* нет Ingress и TLS;
+* нет service mesh;
+* нет Kubernetes-specific exporters вроде `kube-state-metrics`.
+
+Эти ограничения являются осознанными и оставлены для возможных следующих этапов.
 
 ---
 
 # Результат этапа
 
-После завершения этапа приложение умеет:
+После завершения этапа `server-watch` можно:
 
-* измерять latency HTTP-запросов;
-* экспортировать HTTP performance metrics через Prometheus;
-* отображать P50, P95, P99 и RPS в Grafana;
-* проводить воспроизводимые нагрузочные тесты;
-* измерять производительность отдельных компонентов через Go benchmarks;
-* исследовать поведение SQLite под нагрузкой;
-* выполнять базовое CPU profiling через pprof.
+* собрать в минимальный Docker image;
+* запустить вместе с Redis, Prometheus и Grafana через Docker Compose;
+* хранить SQLite и изменяемую конфигурацию вне контейнера;
+* передавать конфигурацию через environment variables;
+* безопасно передавать Slack URL через Kubernetes Secret;
+* установить приложение в Kubernetes через Helm;
+* использовать Kubernetes Service для доступа к API;
+* сохранять историю метрик при пересоздании Pod;
+* выполнять `helm upgrade` и `helm rollback`;
+* проверять состояние приложения через `/health`;
+* просматривать JSON-логи через стандартные container/Kubernetes tools.
 
-Таким образом, в проекте появилась базовая система измерения и анализа производительности, которая позволяет сравнивать изменения кода по фактическим результатам тестов.
+Таким образом, после этапа 7 проект переходит от локального Go-сервиса к воспроизводимому контейнерному и Kubernetes-окружению с базовой персистентностью и управлением deployment lifecycle.
