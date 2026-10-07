@@ -12,7 +12,7 @@ RUN CGO_ENABLED=0 GOOS=linux \
     -o server-watch \
     ./cmd/server-watch
 
-FROM alpine:latest
+FROM scratch
 
 WORKDIR /app
 

@@ -92,7 +92,7 @@ func main() {
 		worker.Run(ctx)
 	}()
 
-	sys := system.NewSystem(repo, alertStateStore, cfg, "config.yaml", cache, notificationQueue)
+	sys := system.NewSystem(repo, alertStateStore, cfg, configPath, cache, notificationQueue)
 	err = sys.CollectMetrics(ctx)
 	if err != nil {
 		slog.Error("не удалось прочитать метрики при запуске", "error", err)

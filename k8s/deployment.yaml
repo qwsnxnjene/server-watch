@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: server-watch
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: server-watch
+
+  template:
+    metadata:
+      labels:
+        app: server-watch
+
+    spec:
+      initContainers:
+        - name: init-config
+          image: alpine:latest
+          command:
+            - sh
+            - -c
+            - |
+              if [ ! -f /config/config.yaml ]; then
+                cp /config-source/config.yaml /config/config.yaml
+              fi
+          volumeMounts:
+            - name: config-source
+              mountPath: /config-source
+            - name: config-data
+              mountPath: /config
+
+      containers:
+        - name: server-watch
+          image: server-watch:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: CONFIG_PATH
+              value: /config/config.yaml
+            - name: SLACK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: server-watch-secret
+                  key: SLACK_URL
+
+          volumeMounts:
+            - name: config-data
+              mountPath: /config
+            - name: sqlite-data
+              mountPath: /data
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 2
+            periodSeconds: 5
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: config-source
+          configMap:
+            name: server-watch-config
+
+        - name: config-data
+          persistentVolumeClaim:
+            claimName: server-watch-config
+
+        - name: sqlite-data
+          persistentVolumeClaim:
+            claimName: server-watch-sqlite
