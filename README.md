@@ -1,170 +1,85 @@
 # server-watch
 
-`server-watch` — учебный проект на Go для мониторинга состояния Linux-системы.
+Сервис мониторинга состояния Linux-систем на Go, который собирает метрики CPU/RAM/Disk, отдаёт их через HTTP API и Prometheus, хранит историю в SQLite, умеет алертить по порогам с уведомлениями в Slack и разворачивается в Docker/Kubernetes.
 
-Сервис собирает системные метрики, предоставляет их через HTTP API и сохраняет историю измерений в SQLite. Архитектура проекта постепенно расширяется в сторону production-like сервиса: добавляются кэширование, Redis, алерты, фоновые worker'ы, уведомления, конфигурация и observability.
+Проект сделан поэтапно от простого скрипта CLI до сервиса с Redis-кэшем, фоновыми воркерами, observability и Helm-чартом. История всех этапов — в [`tasks/`](./tasks).
 
-## Что уже реализовано
+## Содержание
 
-На текущий момент проект включает:
+- [Возможности](#возможности)
+- [Архитектура](#архитектура)
+- [Технологии](#технологии)
+- [Быстрый старт](#быстрый-старт)
+  - [Локально](#локально)
+  - [Docker Compose](#docker-compose)
+  - [Kubernetes (Helm)](#kubernetes-helm)
+- [HTTP API](#http-api)
+- [Конфигурация](#конфигурация)
+- [Тесты и бенчмарки](#тесты-и-бенчмарки)
+- [Структура проекта](#структура-проекта)
+- [Известные ограничения](#известные-ограничения)
 
-* HTTP API для получения состояния системы;
-* сбор метрик:
+## Возможности
 
-  * CPU;
-  * RAM;
-  * Disk;
-* endpoint `/health` для проверки состояния сервиса;
-* endpoint `/metrics` для получения текущих метрик;
-* endpoint `/history` для получения исторических метрик;
-* endpoint `/alerts` для получения алертов;
-* endpoint `/config` для изменения конфигурации приложения;
-* Prometheus endpoint для сбора метрик;
-* Визуализация метрик с Grafana;
-* сохранение истории метрик в SQLite;
-* получение истории метрик через API;
-* graceful shutdown HTTP-сервера;
-* корректную работу с `context.Context`;
-* отмену фоновых операций при завершении приложения;
-* Redis для кэширования метрик;
-* Redis health check;
-* Redis-backed состояние алертов с fallback на in-memory storage;
-* систему алертов по CPU и памяти;
-* очередь уведомлений;
-* отправку уведомлений через HTTP;
-* фонового notification worker;
-* конфигурацию приложения;
-* request-scoped логирование через `slog`;
-* `request_id` для сквозной корреляции логов HTTP-запроса;
-* тесты основных компонентов;
-* проверку проекта с помощью `go test ./...`;
-* проверку на race condition с помощью `go test -race ./...`;
-* бенчмарк-тесты критических функций;
-* middleware для измерения производительности хэндлеров;
-* сбор метрик для подсчета p50, p95, p99 и rps для каждого эндпоинта;
-* возможность включить/выключить профилирование с помощью pprof.
+**Сбор и выдача метрик**
+- Сбор CPU, RAM и Disk каждые 5 секунд в фоновой горутине с кэшированием в памяти и в Redis.
+- `/metrics` отдаёт текущие значения в JSON или в формате Prometheus - в зависимости от заголовка `Accept`.
+- История измерений сохраняется в SQLite и доступна через `/history` с фильтром по периоду.
 
-Проект развивается поэтапно: каждый новый этап добавляет инфраструктурную или архитектурную возможности, не ломая уже существующую функциональность.
+**Алерты**
+- Пороговые алерты по CPU и памяти: отдельные счётчики срабатывания (`trigger_count`) и восстановления (`resolve_count`), чтобы не алертить на единичный всплеск.
+- Состояние алертов хранится в Redis (атомарная запись через embedded Lua-скрипт) с автоматическим fallback на in-memory хранилище при недоступности Redis и синхронизацией состояния после его восстановления.
+- Уведомления уходят через очередь в Redis и фоновый worker, с отправкой в Slack (включается конфигурацией).
 
-# Этап 7 — Docker и Kubernetes
+**Observability**
+- Структурированное логирование через `log/slog` в JSON.
+- Сквозная корреляция логов одного HTTP-запроса через `request_id` (из заголовка `X-Request-ID` или сгенерированный UUID).
+- Метрики Prometheus, включая гистограмму `http_request_duration_seconds` по каждому эндпоинту (RPS, P50/P95/P99), и готовые дашборды Grafana.
+- Опциональное профилирование через `net/http/pprof`, включается конфигурацией.
 
-## Цель этапа
+**Эксплуатация**
+- Graceful shutdown по SIGINT/SIGTERM: сервер и фоновые горутины останавливаются согласованно через `context.Context` и `sync.WaitGroup`.
+- Конфигурация загружается из YAML, переопределяется переменными окружения и валидируется при старте; часть параметров можно менять на лету через `/config`.
+- Docker-образ на базе `scratch` (multi-stage build, статический бинарник), Docker Compose со всем стеком (Redis, Prometheus, Grafana), Helm-чарт и сырые манифесты Kubernetes.
 
-Подготовить `server-watch` к запуску в контейнере и Kubernetes.
+**Качество кода**
+- 78 тестов (~4000 строк, больше, чем самого кода) и 10 бенчмарков `testing.B`, включая интеграционные тесты Redis и SQLite.
+- Проверка на race condition (`go test -race ./...`), `go vet` и `golangci-lint` в `make check`.
+- Нагрузочное тестирование HTTP API задокументировано в [`docs/benchmarks.md`](./docs/benchmarks.md), включая разбор и устранение `SQLITE_BUSY` под нагрузкой через WAL-режим.
 
-На этом этапе проект переводится от локального запуска приложения к воспроизводимому инфраструктурному окружению:
-
-* собирается Docker image;
-* используется multi-stage Docker build;
-* приложение запускается в минимальном runtime image;
-* внешние зависимости подключаются через Docker Compose;
-* конфигурация и данные сохраняются вне контейнера;
-* Kubernetes-манифесты объединяются в Helm chart;
-* проверяется жизненный цикл приложения в Kubernetes;
-* проверяется сохранение данных при пересоздании Pod.
-
-Этап является учебным и не ставит целью полностью production-ready Kubernetes deployment.
-
----
-
-## Docker
-
-Для сборки приложения используется multi-stage Dockerfile.
-
-На этапе сборки используется:
+## Архитектура
 
 ```text
-golang:1.27.1
+                     HTTP-запрос
+                          │
+                          ▼
+              RequestIDMiddleware (request_id)
+                          │
+                          ▼
+              MetricsMiddleware (latency → Prometheus)
+                          │
+                          ▼
+                     HTTP Handler
+                          │
+            ┌─────────────┼──────────────┐
+            ▼             ▼              ▼
+         System      Repository       Redis
+      (бизнес-логика)  (SQLite)    (cache, alert state,
+            │                        notification queue)
+            ▼
+      фоновый сборщик метрик (ticker, 5s)
+            │
+            ▼
+       обновление алертов → очередь уведомлений → notification worker → Slack
 ```
 
-После компиляции бинарник переносится в минимальный runtime image:
-
-```text
-scratch
-```
-
-Приложение собирается как статический Linux binary:
-
-```dockerfile
-RUN CGO_ENABLED=0 GOOS=linux \
-    go build -ldflags="-s -w" \
-    -o server-watch \
-    ./cmd/server-watch
-```
-
-Runtime image содержит только:
-
-* бинарник `server-watch`;
-* `config.yaml`.
-
-Проверка бинарника показала, что он статический, поэтому использование `scratch` возможно без дополнительной runtime-библиотеки.
-
----
-
-## Docker image
-
-После сборки размер image составляет примерно:
-
-```text
-32 MB
-```
-
-Формальный ориентир `<30 MB` в текущей реализации не достигнут.
-
-При этом image уже значительно меньше типичного runtime image с полноценной Linux userland и содержит только необходимые для запуска приложения файлы.
-
----
-
-## Особенность scratch image
-
-Так как runtime использует:
-
-```text
-scratch
-```
-
-в контейнере отсутствуют:
-
-* shell;
-* `cat`;
-* `sh`;
-* `printenv`;
-* другие стандартные Linux utilities.
-
-Поэтому диагностика контейнера выполняется преимущественно через:
-
-* HTTP endpoints приложения;
-* `docker logs`;
-* `kubectl logs`;
-* внешние debug/curl-контейнеры.
-
----
-
-## Docker Compose
-
-Для локального инфраструктурного окружения используется:
-
-```text
-docker-compose.yml
-```
-
-Compose включает:
-
-```text
-server-watch
-redis
-prometheus
-grafana
-```
-
-Схема окружения:
+Инфраструктура в Docker Compose:
 
 ```text
               ┌──────────────┐
               │    Grafana   │
               │    :3000     │
               └──────┬───────┘
-                     │
                      ▼
               ┌──────────────┐
               │  Prometheus  │
@@ -176,482 +91,217 @@ grafana
 │    Redis     │◄─│ server-watch │
 │    :6379     │  │    :8080     │
 └──────────────┘  └──────┬───────┘
-                         │
                          ▼
-                  SQLite volume
+                  SQLite (volume)
 ```
 
-`server-watch` получает адрес Redis через:
+## Технологии
 
-```text
-REDIS_ADDR=redis:6379
+| Область | Используется |
+|---|---|
+| Язык | Go 1.27 |
+| HTTP | стандартный `net/http` (`http.ServeMux`) |
+| Хранилище истории | SQLite (`modernc.org/sqlite`, без cgo) |
+| Кэш и состояние | Redis (`redis/go-redis/v9`) |
+| Метрики | `prometheus/client_golang` + Grafana |
+| Логирование | `log/slog`, JSON-формат |
+| Конфигурация | YAML (`gopkg.in/yaml.v3`) + переменные окружения |
+| Контейнеризация | Docker (multi-stage, `scratch`), Docker Compose |
+| Оркестрация | Kubernetes (manifests + Helm chart) |
+| Качество | `go vet`, `golangci-lint`, `go test -race`, бенчмарки |
+
+## Быстрый старт
+
+### Локально
+
+Нужен установленный Go и Redis (слушающий `localhost:6379`).
+
+```bash
+git clone https://github.com/qwsnxnjene/server-watch.git
+cd server-watch
+make run
+# или напрямую:
+go run ./cmd/server-watch
 ```
 
-Prometheus получает метрики с:
+При первом запуске создастся `config.yaml` со значениями по умолчанию и файл `server-watch.db` (SQLite). Сервис поднимется на `localhost:8080`.
 
-```text
-server-watch:8080
+### Docker Compose
+
+Поднимает сразу весь стек: сам сервис, Redis, Prometheus и Grafana.
+
+```bash
+make up
+# или:
+docker compose up -d
 ```
 
-Grafana использует Prometheus как datasource.
+- API: `http://localhost:8080`
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000` (datasource на Prometheus уже прописан)
 
----
+SQLite и `config.yaml` вынесены из образа через volume/bind-mount, так что `docker compose down && docker compose up -d` не теряет историю метрик.
 
-## Персистентность в Compose
-
-SQLite не хранится внутри контейнера приложения.
-
-В Compose используется отдельный volume:
-
-```text
-sqlite_data
+```bash
+make stop
+# или:
+docker compose down
 ```
 
-Он монтируется в:
-
-```text
-/data
-```
-
-Приложение использует:
-
-```text
-DB_PATH=/data/server-watch.db
-```
-
-Поэтому удаление и пересоздание контейнера `server-watch` не удаляет историю метрик.
-
-Конфигурация также вынесена из image:
-
-```text
-./config.yaml:/app/config.yaml
-```
-
-Это необходимо, потому что endpoint `/config` может изменять конфигурацию приложения.
-
----
-
-## Конфигурация
-
-Путь к конфигурации задаётся через:
-
-```text
-CONFIG_PATH
-```
-
-Если переменная не задана, используется:
-
-```text
-config.yaml
-```
-
-Для Docker Compose используется:
-
-```text
-CONFIG_PATH=/app/config.yaml
-```
-
-Путь к SQLite задаётся через:
-
-```text
-DB_PATH
-```
-
----
-
-## Environment variables
-
-В текущей реализации используются следующие переменные окружения:
-
-```text
-CONFIG_PATH
-DB_PATH
-REDIS_ADDR
-
-CPU_THRESHOLD
-MEM_THRESHOLD
-TRIGGER_COUNT
-RESOLVE_COUNT
-
-SLACK_ENABLED
-SLACK_URL
-
-PPROF_ENABLED
-```
-
-Важно: некоторые переменные из первоначального инфраструктурного плана пока не реализованы в коде, например:
-
-```text
-REDIS_PASSWORD
-REDIS_DB
-SLACK_WEBHOOK_URL
-WEBHOOK_URL
-LOG_LEVEL
-```
-
-Поэтому они не используются текущим deployment'ом.
-
----
-
-# Kubernetes
-
-Для Kubernetes создан Helm chart:
-
-```text
-helm/server-watch/
-```
-
-Chart содержит:
-
-```text
-Chart.yaml
-values.yaml
-templates/
-```
-
-Проверка chart:
+### Kubernetes (Helm)
 
 ```bash
 helm lint helm/server-watch
-```
-
-Рендеринг:
-
-```bash
 helm template server-watch helm/server-watch
-```
 
----
-
-## Kubernetes resources
-
-Helm chart создаёт:
-
-* Deployment;
-* Service;
-* ConfigMap;
-* Secret;
-* PVC для конфигурации;
-* PVC для SQLite.
-
-Структура окружения:
-
-```text
-              ┌──────────────────┐
-              │      Service     │
-              │    ClusterIP     │
-              │      :8080       │
-              └────────┬─────────┘
-                       │
-                       ▼
-              ┌──────────────────┐
-              │    Deployment    │
-              │  server-watch    │
-              └────────┬─────────┘
-                       │
-              ┌────────┴─────────┐
-              ▼                  ▼
-       config PVC          sqlite PVC
-```
-
----
-
-## Kubernetes Service
-
-Service имеет тип:
-
-```text
-ClusterIP
-```
-
-и публикует:
-
-```text
-8080
-```
-
-наружу сервис напрямую не выставляется.
-
-Для проверки HTTP API внутри кластера использовался временный Pod с `curl`.
-
-Например:
-
-```bash
-kubectl run curl --rm -it \
-  --image=curlimages/curl \
-  --restart=Never \
-  -- \
-  curl http://server-watch:8080/health
-```
-
----
-
-## Health checks
-
-Для Kubernetes используется endpoint:
-
-```text
-/health
-```
-
-Он используется для проверки состояния приложения.
-
-Проверяется HTTP response:
-
-```text
-200 OK
-```
-
-После запуска или пересоздания Pod Kubernetes ждёт, пока приложение станет готово принимать запросы.
-
-Это позволяет не направлять трафик на Pod, который ещё не завершил запуск.
-
----
-
-# Kubernetes configuration
-
-Начальная конфигурация приложения хранится в:
-
-```text
-ConfigMap
-```
-
-ConfigMap содержит:
-
-```yaml
-cpu_threshold: 80
-mem_threshold: 90
-trigger_count: 3
-resolve_count: 3
-slack_enabled: false
-slack_url: ""
-pprof_enabled: false
-```
-
-Так как приложение может изменять `config.yaml` через HTTP API, начальная конфигурация из ConfigMap при запуске копируется в отдельный PVC.
-
-Для этого используется `initContainer`.
-
-Он выполняет логику:
-
-```text
-если config.yaml ещё отсутствует
-        │
-        ▼
-скопировать его из ConfigMap
-        │
-        ▼
-основной контейнер использует PVC
-```
-
-Это позволяет одновременно использовать:
-
-* ConfigMap для начальной конфигурации;
-* PVC для изменяемой конфигурации.
-
----
-
-# Kubernetes secrets
-
-Для Slack URL используется Kubernetes Secret:
-
-```text
-SLACK_URL
-```
-
-В Helm chart реальное значение секрета не хранится.
-
-Chart содержит только пустое значение-заглушку.
-
-Реальный secret должен задаваться отдельно при deployment.
-
-Таким образом, секрет не требуется хранить непосредственно в Git-репозитории или Docker image.
-
----
-
-# SQLite в Kubernetes
-
-SQLite хранится на отдельном PersistentVolumeClaim:
-
-```text
-server-watch-sqlite
-```
-
-Приложение использует:
-
-```text
-DB_PATH=/data/server-watch.db
-```
-
-PVC имеет:
-
-```text
-ReadWriteOnce
-```
-
-и используется одним экземпляром приложения.
-
-Это связано с архитектурным ограничением проекта:
-
-```text
-replicaCount: 1
-```
-
-Несколько Pod с одной SQLite-базой в текущей архитектуре не используются.
-
----
-
-# Проверка persistence
-
-Persistence была проверена экспериментально.
-
-Сценарий:
-
-```text
-1. Запустить server-watch
-2. Записать метрики
-3. Получить /history
-4. Удалить Pod
-5. Дождаться создания нового Pod
-6. Снова вызвать /history
-```
-
-После пересоздания Pod история метрик сохранилась.
-
-Это подтверждает, что SQLite database действительно находится на PVC, а не внутри filesystem контейнера.
-
----
-
-# Helm lifecycle
-
-Проверен полный базовый lifecycle Helm release.
-
-Установка:
-
-```bash
 helm install server-watch helm/server-watch
-```
-
-Обновление:
-
-```bash
 helm upgrade server-watch helm/server-watch
-```
-
-Откат:
-
-```bash
 helm rollback server-watch 1
 ```
 
-После rollback:
-
-* Pod успешно запустился;
-* Service остался доступен;
-* PVC остались `Bound`;
-* история SQLite сохранилась.
-
-Таким образом, deployment можно изменять и откатывать без потери persistent data.
-
----
-
-# Graceful shutdown и logging
-
-Предыдущая реализация graceful shutdown сохраняется и при запуске в Kubernetes.
-
-При остановке контейнера Kubernetes отправляет:
-
-```text
-SIGTERM
-```
-
-Приложение корректно завершает:
-
-* HTTP server;
-* background workers;
-* collector;
-* context-dependent operations.
-
-Логи приложения выводятся в stdout в JSON-формате через:
-
-```text
-log/slog
-```
-
-Это позволяет использовать стандартные инструменты контейнерной инфраструктуры:
+Chart создаёт `Deployment`, `Service` (ClusterIP, порт 8080), `ConfigMap` с начальной конфигурацией, `Secret` для `SLACK_URL` и два `PersistentVolumeClaim` (для SQLite и для изменяемого `config.yaml`). Сервис наружу не публикуется — для проверки изнутри кластера:
 
 ```bash
-docker logs
-kubectl logs
+kubectl run curl --rm -it --image=curlimages/curl --restart=Never \
+  -- curl http://server-watch:8080/health
 ```
 
----
+Сырые манифесты без Helm лежат в [`k8s/`](./k8s).
 
-# Что проверено
+## HTTP API
 
-В рамках этапа проверены:
+| Метод | Путь | Описание |
+|---|---|---|
+| GET | `/health` | Статус сервиса: `200` если метрики читаются и обновлялись не дольше 10с назад, иначе `503` |
+| GET | `/metrics` | Текущие метрики в JSON; при `Accept: text/plain` или `application/openmetrics-text` — формат Prometheus |
+| GET | `/history?from=&to=` | История метрик за период (`RFC3339`); по умолчанию — последний час |
+| GET | `/alerts?active_only=` | Список алертов, `active_only=true` — только активные |
+| POST | `/config` | Частичное обновление конфигурации; возвращает итоговый конфиг |
+| GET | `/debug/pprof/*` | Профилирование pprof, только если `PPROF_ENABLED=true` |
 
-* сборка Docker image;
-* запуск контейнера;
-* запуск Docker Compose;
-* Redis;
-* Prometheus;
-* Grafana;
-* HTTP API внутри Compose;
-* Helm lint;
-* Helm template;
-* Helm install;
-* Kubernetes Deployment;
-* Kubernetes Service;
-* ConfigMap;
-* Secret;
-* PVC для SQLite;
-* PVC для конфигурации;
-* `/health` внутри Kubernetes;
-* `/history` внутри Kubernetes;
-* пересоздание Pod;
-* сохранение SQLite history;
-* `helm upgrade`;
-* `helm rollback`.
+<details>
+<summary>Примеры запросов и ответов</summary>
 
----
+`GET /health`
 
-# Ограничения текущей реализации
+```json
+{
+  "status": "ok",
+  "last_collection": "2026-10-07T18:40:12Z"
+}
+```
 
-Этап специально не доводит инфраструктуру до полноценного production deployment.
+`GET /metrics`
 
-Текущие ограничения:
+```json
+{
+  "cpu_percent": 12.5,
+  "mem_percent": 45.2,
+  "mem_used_mb": 3840,
+  "mem_total_mb": 8192,
+  "disk_percent": 60.1,
+  "disk_used_gb": 45,
+  "disk_total_gb": 75
+}
+```
 
-* используется один replica;
-* SQLite не рассчитан на несколько экземпляров приложения;
-* Docker image примерно 32 MB, а не `<30 MB`;
-* runtime использует `scratch`, поэтому внутри контейнера нет shell и диагностических утилит;
-* контейнер пока запускается от root;
-* Prometheus и Grafana запускаются через Docker Compose, но не входят в Helm chart;
-* ServiceMonitor пока не реализован;
-* нет CI/CD pipeline;
-* нет Ingress и TLS;
-* нет service mesh;
-* нет Kubernetes-specific exporters вроде `kube-state-metrics`.
+`GET /alerts?active_only=true`
 
-Эти ограничения являются осознанными и оставлены для возможных следующих этапов.
+```json
+{
+  "alerts": [
+    {
+      "id": 14,
+      "alert_type": "high_cpu",
+      "ts": "2026-10-07T18:39:00Z",
+      "threshold": 80,
+      "resolved": false,
+      "resolvedAt": null,
+      "value": 91.4
+    }
+  ]
+}
+```
 
----
+`POST /config` — тело запроса (только изменяемые поля):
 
-# Результат этапа
+```json
+{
+  "cpu_threshold": 85,
+  "slack_enabled": true,
+  "slack_url": "https://hooks.slack.com/services/..."
+}
+```
 
-После завершения этапа `server-watch` можно:
+</details>
 
-* собрать в минимальный Docker image;
-* запустить вместе с Redis, Prometheus и Grafana через Docker Compose;
-* хранить SQLite и изменяемую конфигурацию вне контейнера;
-* передавать конфигурацию через environment variables;
-* безопасно передавать Slack URL через Kubernetes Secret;
-* установить приложение в Kubernetes через Helm;
-* использовать Kubernetes Service для доступа к API;
-* сохранять историю метрик при пересоздании Pod;
-* выполнять `helm upgrade` и `helm rollback`;
-* проверять состояние приложения через `/health`;
-* просматривать JSON-логи через стандартные container/Kubernetes tools.
+## Конфигурация
 
-Таким образом, после этапа 7 проект переходит от локального Go-сервиса к воспроизводимому контейнерному и Kubernetes-окружению с базовой персистентностью и управлением deployment lifecycle.
+Порядок применения: значения по умолчанию → `config.yaml` → переменные окружения → валидация. При первом запуске, если файла конфигурации нет, он создаётся автоматически (`0600`).
+
+| Параметр YAML | Переменная окружения | По умолчанию | Описание |
+|---|---|---|---|
+| `cpu_threshold` | `CPU_THRESHOLD` | `80` | Порог CPU, % |
+| `mem_threshold` | `MEM_THRESHOLD` | `90` | Порог памяти, % |
+| `trigger_count` | `TRIGGER_COUNT` | `3` | Сколько подряд превышений порога нужно для алерта |
+| `resolve_count` | `RESOLVE_COUNT` | `3` | Сколько подряд значений в норме нужно, чтобы снять алерт |
+| `slack_enabled` | `SLACK_ENABLED` | `false` | Включить отправку уведомлений в Slack |
+| `slack_url` | `SLACK_URL` | `""` | Webhook URL (обязателен http/https при `slack_enabled: true`) |
+| `pprof_enabled` | `PPROF_ENABLED` | `false` | Включить `/debug/pprof/*` |
+| — | `CONFIG_PATH` | `config.yaml` | Путь к файлу конфигурации |
+| — | `DB_PATH` | `server-watch.db` | Путь к файлу SQLite |
+| — | `REDIS_ADDR` | `localhost:6379` | Адрес Redis |
+
+Полный пример — в [`.env.example`](./.env.example).
+
+## Тесты и бенчмарки
+
+```bash
+make test        # go test ./... -v
+make check        # go vet ./... + golangci-lint run
+make benchmark    # go test -bench=. -benchmem ./...
+```
+
+Для тестов пакета `internal/redis` нужен запущенный Redis (`docker compose up -d redis` или локальный на `6379`).
+
+Race-детектор:
+
+```bash
+go test -race ./...
+```
+
+Нагрузочное тестирование HTTP API (`hey`, 10 000 запросов, concurrency=200) и подробный разбор найденной под нагрузкой проблемы `SQLITE_BUSY` и её решения через `PRAGMA journal_mode=WAL` — в [`docs/benchmarks.md`](./docs/benchmarks.md). Коротко: `/health` держит ~34k RPS, `/history` (самый тяжёлый эндпоинт, чтение из SQLite) - около 4.9k RPS после перехода на WAL, с P95 ~ 93 мс.
+
+## Структура проекта
+
+```text
+cmd/server-watch/        точка входа, сборка зависимостей, HTTP-сервер
+internal/
+  config/                загрузка/валидация/сохранение конфигурации
+  handlers/               HTTP-хендлеры и middleware (request-id, метрики)
+  logger/                 request-scoped логгер поверх context.Context
+  notifications/          очередь, воркер, отправители уведомлений (Slack)
+  prometheus/             регистрация и хендлер метрик Prometheus
+  redis/                  клиент Redis: кэш метрик, состояние алертов, очередь
+  storage/                SQLite-репозиторий и миграции
+  system/                 бизнес-логика: сбор метрик, алерты, конфигурация
+    alert-state-store/    in-memory реализация хранилища состояния алертов
+    model/                доменные модели (Metrics, Alert, AlertState)
+docs/benchmarks.md        методика и результаты нагрузочного тестирования
+k8s/                       сырые манифесты Kubernetes
+helm/server-watch/         Helm-чарт
+grafana/provisioning/      автопровижининг datasource для Grafana
+tasks/                      ТЗ и критерии приёмки по каждому этапу разработки
+```
+
+## Известные ограничения
+
+Осознанные упрощения, оставленные вне текущего объёма проекта:
+
+- Одна реплика; SQLite не рассчитан на несколько одновременно пишущих экземпляров сервиса.
+- Docker-образ на `scratch` - около 32 МБ, внутри нет шелла и диагностических утилит (отладка через `/health`, `docker logs`/`kubectl logs`, pprof).
+- Контейнер запускается от root.
+- Prometheus и Grafana поднимаются через Docker Compose, но не входят в Helm-чарт; `ServiceMonitor` не реализован.
+- Нет CI/CD pipeline, Ingress, TLS и service mesh.
+
+Подробности по каждому этапу разработки в [`tasks/`](./tasks).
